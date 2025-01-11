@@ -423,6 +423,10 @@ Em caso de erro durante a atualização, o sistema será automaticamente restaur
 - Ajuste as permissões de arquivos se necessário
 - Monitore os logs após atualizações
 
+## Deploy Automático
+
+O projeto está configurado com GitHub Actions para fazer deploy automático na Digital Ocean sempre que houver um push na branch main.
+
 ## Funcionalidades Principais
 
 ### Dashboard
