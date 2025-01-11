@@ -6,248 +6,162 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Função para solicitar input do usuário
-get_input() {
-    local prompt=$1
-    local default=$2
-    local value=""
-    
-    echo -ne "${YELLOW}$prompt ${NC}[$default]: "
-    read value
-    echo "${value:-$default}"
-}
-
-# Função para solicitar senha
-get_password() {
-    local prompt=$1
-    local password=""
-    local confirm_password=""
-    
-    while true; do
-        echo -ne "${YELLOW}$prompt ${NC}"
-        read -s password
-        echo
-        
-        echo -ne "${YELLOW}Confirme a senha: ${NC}"
-        read -s confirm_password
-        echo
-        
-        if [ "$password" = "$confirm_password" ]; then
-            echo "$password"
-            break
-        else
-            echo -e "${RED}As senhas não coincidem. Tente novamente.${NC}\n"
-        fi
-    done
-}
-
-# Função para gerar JWT secret
-generate_jwt_secret() {
-    openssl rand -base64 32
-}
-
-clear
-echo -e "${GREEN}=== ContaCerta - Assistente de Instalação ===${NC}\n"
-
-# Atualizar sistema
-echo -e "${YELLOW}Atualizando sistema...${NC}"
-sudo apt update
-sudo apt upgrade -y
-
-# Instalar dependências básicas
-echo -e "\n${YELLOW}Instalando dependências básicas...${NC}"
-sudo apt install -y curl wget git software-properties-common
-
-# Instalar Node.js 18.x
-echo -e "\n${YELLOW}Instalando Node.js 18.x...${NC}"
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install -y nodejs
-node --version
-
-# Instalar MySQL 8.0
-echo -e "\n${YELLOW}Instalando MySQL 8.0...${NC}"
-sudo apt install -y mysql-server
-sudo systemctl start mysql
-sudo systemctl enable mysql
-mysql --version
-
-# Instalar Nginx
-echo -e "\n${YELLOW}Instalando Nginx...${NC}"
-sudo apt install -y nginx
-sudo systemctl start nginx
-sudo systemctl enable nginx
-nginx -v
-
-# Instalar PM2
-echo -e "\n${YELLOW}Instalando PM2...${NC}"
-sudo npm install -g pm2
-pm2 --version
-
-echo -e "\n${GREEN}Instalação básica concluída. Iniciando configuração...${NC}\n"
-
-# Solicitar configurações
-echo -e "${GREEN}Configuração do Ambiente${NC}"
-echo -e "------------------------"
-echo -e "${YELLOW}Exemplo de domínio: meusite.com.br (sem http:// ou www)${NC}"
-DOMAIN=$(get_input "Digite o domínio do site" "localhost")
-NODE_ENV=$(get_input "Ambiente (production/development)" "production")
-
-echo -e "\n${GREEN}Configuração do MySQL${NC}"
-echo -e "------------------------"
-echo -e "${YELLOW}Digite a senha para o usuário root do MySQL${NC}"
-MYSQL_ROOT_PASSWORD=$(get_password "Senha do root: ")
-
-# Configurar MySQL com senha root
-echo -e "\n${YELLOW}Configurando MySQL...${NC}"
-sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
-
-# Configurar MySQL para baixo consumo de memória
-echo -e "${YELLOW}Otimizando MySQL para baixo consumo de memória...${NC}"
-sudo tee /etc/mysql/mysql.conf.d/low-memory.cnf << EOL
-[mysqld]
-performance_schema = off
-key_buffer_size = 16M
-max_connections = 25
-innodb_buffer_pool_size = 64M
-innodb_log_buffer_size = 1M
-query_cache_size = 8M
-tmp_table_size = 8M
-max_heap_table_size = 8M
-EOL
-
-# Reiniciar MySQL para aplicar configurações
-sudo systemctl restart mysql
-
-MYSQL_DATABASE=$(get_input "Nome do banco de dados" "contacerta")
-MYSQL_USER=$(get_input "Usuário do banco de dados" "root")
-
-if [ "$MYSQL_USER" != "root" ]; then
-    echo -e "\n${YELLOW}Digite a senha para o usuário $MYSQL_USER${NC}"
-    MYSQL_PASSWORD=$(get_password "Senha do usuário: ")
-    sudo mysql -u root -p$MYSQL_ROOT_PASSWORD -e "CREATE USER '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';"
-    sudo mysql -u root -p$MYSQL_ROOT_PASSWORD -e "GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'localhost';"
-else
-    MYSQL_PASSWORD=$MYSQL_ROOT_PASSWORD
-fi
-
-sudo mysql -u root -p$MYSQL_ROOT_PASSWORD -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;"
-sudo mysql -u root -p$MYSQL_ROOT_PASSWORD -e "FLUSH PRIVILEGES;"
-
-echo -e "\n${GREEN}Configuração da Aplicação${NC}"
-echo -e "------------------------"
-APP_DIR="/var/www/ContaCerta"
-echo -e "${YELLOW}Diretório de instalação: $APP_DIR${NC}"
-
-# Gerar JWT Secret
-JWT_SECRET=$(generate_jwt_secret)
-echo -e "${YELLOW}Chave JWT gerada automaticamente${NC}"
-
-# Mostrar resumo
-echo -e "\n${GREEN}Resumo da Instalação:${NC}"
-echo -e "------------------------"
-echo "Domínio: $DOMAIN"
-echo "Ambiente: $NODE_ENV"
-echo "Diretório: $APP_DIR"
-echo "Banco de Dados: $MYSQL_DATABASE"
-echo "Usuário BD: $MYSQL_USER"
-
-echo -ne "\n${YELLOW}As configurações estão corretas? (S/n): ${NC}"
-read confirm
-if [[ $confirm =~ ^[Nn] ]]; then
-    echo -e "${RED}Instalação cancelada pelo usuário${NC}"
+# Verificar se está rodando como root
+if [ "$EUID" -ne 0 ]; then 
+    echo -e "${RED}Por favor, execute o script como root (sudo ./install.sh)${NC}"
     exit 1
 fi
+
+# Função para verificar memória disponível
+check_memory() {
+    local available_mem=$(free -m | awk '/^Mem:/{print $7}')
+    if [ $available_mem -lt 100 ]; then
+        echo -e "${YELLOW}Pouca memória disponível ($available_mem MB). Configurando SWAP...${NC}"
+        return 1
+    fi
+    return 0
+}
 
 # Configurar SWAP
-echo -e "${YELLOW}Configurando SWAP...${NC}"
-if [ ! -f /swapfile ]; then
-    sudo fallocate -l 1G /swapfile
-    sudo chmod 600 /swapfile
-    sudo mkswap /swapfile
-    sudo swapon /swapfile
-    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-    echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
-    echo 'vm.vfs_cache_pressure=50' | sudo tee -a /etc/sysctl.conf
-    sudo sysctl -p
-fi
+setup_swap() {
+    if [ ! -f /swapfile ]; then
+        echo -e "${YELLOW}Configurando SWAP...${NC}"
+        fallocate -l 1G /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+        echo 'vm.swappiness=10' >> /etc/sysctl.conf
+        echo 'vm.vfs_cache_pressure=50' >> /etc/sysctl.conf
+        sysctl -p
+    fi
+}
 
-# Clonar repositório
-echo -e "\n${YELLOW}Clonando repositório...${NC}"
-sudo mkdir -p $APP_DIR
-sudo chown -R $USER:$USER $APP_DIR
-git clone https://github.com/rayhenrique/ContaCerta.git $APP_DIR
+# Limpar processos e cache
+clean_system() {
+    echo -e "${YELLOW}Limpando sistema...${NC}"
+    sync; echo 3 > /proc/sys/vm/drop_caches
+    systemctl stop apache2 2>/dev/null
+    systemctl disable apache2 2>/dev/null
+}
 
-# Configurar backend
-echo -e "\n${YELLOW}Configurando backend...${NC}"
-cd $APP_DIR/backend
-npm install
+# Instalar dependências básicas
+echo -e "${YELLOW}Instalando dependências básicas...${NC}"
+apt update
+apt install -y curl wget git software-properties-common
 
-# Verificar se a instalação do backend foi bem sucedida
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Erro ao instalar dependências do backend${NC}"
-    exit 1
-fi
+# Verificar e configurar SWAP se necessário
+check_memory || setup_swap
 
-# Criar arquivo .env
-cat > .env << EOL
-NODE_ENV=$NODE_ENV
+# Limpar sistema
+clean_system
+
+# Configurar MySQL otimizado
+setup_mysql() {
+    echo -e "${YELLOW}Instalando e configurando MySQL...${NC}"
+    apt install -y mysql-server
+
+    # Configuração otimizada do MySQL
+    cat > /etc/mysql/mysql.conf.d/mysqld.cnf << EOL
+[mysqld]
+# Configurações básicas
+user            = mysql
+pid-file        = /var/run/mysqld/mysqld.pid
+socket          = /var/run/mysqld/mysqld.sock
+port            = 3306
+basedir         = /usr
+datadir         = /var/lib/mysql
+tmpdir          = /tmp
+bind-address    = 127.0.0.1
+
+# Otimizações para baixa memória
+performance_schema = off
+skip-name-resolve
+max_connections = 10
+key_buffer_size = 8M
+innodb_buffer_pool_size = 32M
+innodb_log_buffer_size = 1M
+query_cache_size = 4M
+tmp_table_size = 4M
+max_heap_table_size = 4M
+thread_cache_size = 4
+sort_buffer_size = 256K
+read_buffer_size = 256K
+read_rnd_buffer_size = 256K
+join_buffer_size = 256K
+net_buffer_length = 2K
+
+# InnoDB específico
+innodb_file_per_table = 1
+innodb_flush_method = O_DIRECT
+innodb_flush_log_at_trx_commit = 0
+EOL
+
+    systemctl restart mysql
+    systemctl enable mysql
+}
+
+# Instalar Node.js
+setup_nodejs() {
+    echo -e "${YELLOW}Instalando Node.js...${NC}"
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+    apt install -y nodejs
+    npm install -g pm2
+}
+
+# Instalar Nginx
+setup_nginx() {
+    echo -e "${YELLOW}Instalando Nginx...${NC}"
+    apt install -y nginx
+    systemctl enable nginx
+}
+
+# Configurar banco de dados
+setup_database() {
+    local db_pass=$(openssl rand -base64 12)
+    echo -e "${YELLOW}Configurando banco de dados...${NC}"
+    
+    mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$db_pass';"
+    mysql -e "CREATE DATABASE IF NOT EXISTS contacerta;"
+    mysql -e "FLUSH PRIVILEGES;"
+    
+    echo "DB_PASS=$db_pass" > /tmp/db_credentials
+}
+
+# Configurar aplicação
+setup_application() {
+    echo -e "${YELLOW}Configurando aplicação...${NC}"
+    local db_pass=$(cat /tmp/db_credentials | cut -d= -f2)
+    local jwt_secret=$(openssl rand -base64 32)
+    
+    cd /var/www/ContaCerta/backend
+    
+    # Configurar variáveis de ambiente
+    cat > .env << EOL
+NODE_ENV=production
 DB_HOST=localhost
-DB_USER=$MYSQL_USER
-DB_PASS=$MYSQL_PASSWORD
-DB_NAME=$MYSQL_DATABASE
-JWT_SECRET=$JWT_SECRET
+DB_USER=root
+DB_PASS=$db_pass
+DB_NAME=contacerta
+JWT_SECRET=$jwt_secret
 PORT=3001
 EOL
 
-# Executar migrações
-echo -e "\n${YELLOW}Executando migrações do banco de dados...${NC}"
-npx sequelize-cli db:migrate
-
-# Verificar se as migrações foram bem sucedidas
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Erro ao executar migrações${NC}"
-    exit 1
-fi
-
-# Configurar frontend
-echo -e "\n${YELLOW}Configurando frontend...${NC}"
-cd $APP_DIR/frontend
-npm install
-
-# Verificar se a instalação do frontend foi bem sucedida
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Erro ao instalar dependências do frontend${NC}"
-    exit 1
-fi
-
-# Criar arquivo .env
-cat > .env << EOL
-REACT_APP_API_URL=http://$DOMAIN/api
-EOL
-
-# Build do frontend
-echo -e "\n${YELLOW}Gerando build do frontend...${NC}"
-npm run build
-
-# Verificar se o build foi bem sucedido
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Erro ao gerar build do frontend${NC}"
-    exit 1
-fi
+    # Instalar dependências e executar migrações
+    npm install
+    npx sequelize-cli db:migrate
+}
 
 # Configurar Nginx
-echo -e "\n${YELLOW}Configurando Nginx...${NC}"
-sudo tee /etc/nginx/sites-available/contacerta << EOL
+setup_nginx_config() {
+    cat > /etc/nginx/sites-available/contacerta << EOL
 server {
     listen 80;
-    server_name $DOMAIN;
-
-    root $APP_DIR/frontend/build;
-    index index.html;
+    server_name _;
 
     location / {
+        root /var/www/ContaCerta/frontend/build;
         try_files \$uri \$uri/ /index.html;
-        add_header Cache-Control "no-cache";
     }
 
     location /api {
@@ -257,101 +171,43 @@ server {
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
         proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 }
 EOL
 
-# Ativar site e reiniciar Nginx
-sudo ln -sf /etc/nginx/sites-available/contacerta /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl restart nginx
+    ln -sf /etc/nginx/sites-available/contacerta /etc/nginx/sites-enabled/
+    rm -f /etc/nginx/sites-enabled/default
+    nginx -t && systemctl restart nginx
+}
 
-# Iniciar aplicação com PM2
-echo -e "\n${YELLOW}Iniciando aplicação...${NC}"
-cd $APP_DIR/backend
+# Função principal de instalação
+main() {
+    clean_system
+    setup_swap
+    setup_mysql
+    setup_nodejs
+    setup_nginx
+    
+    # Clonar repositório
+    mkdir -p /var/www
+    cd /var/www
+    git clone https://github.com/rayhenrique/ContaCerta.git
+    
+    setup_database
+    setup_application
+    setup_nginx_config
+    
+    # Iniciar aplicação
+    cd /var/www/ContaCerta/backend
+    pm2 start npm --name "contacerta-api" -- start --max-memory-restart 150M
+    pm2 save
+    
+    # Limpar
+    rm -f /tmp/db_credentials
+    
+    echo -e "${GREEN}Instalação concluída!${NC}"
+    echo -e "Acesse: http://seu_ip"
+}
 
-# Verificar se o arquivo server.js existe
-if [ ! -f "src/server.js" ]; then
-    echo -e "${RED}Erro: Arquivo src/server.js não encontrado${NC}"
-    exit 1
-fi
-
-# Parar instância anterior se existir
-pm2 delete contacerta-backend 2>/dev/null
-
-# Configurar PM2 com limite de memória
-echo -e "${YELLOW}Configurando PM2 com limite de memória...${NC}"
-pm2 start npm --name "contacerta-api" -- start --max-memory-restart 150M
-
-# Verificar se o processo iniciou
-if ! pm2 show contacerta-api > /dev/null 2>&1; then
-    echo -e "${RED}Erro ao iniciar o servidor com PM2${NC}"
-    exit 1
-fi
-
-# Salvar configuração do PM2
-echo -e "\n${YELLOW}Salvando configuração do PM2...${NC}"
-pm2 save
-
-# Configurar PM2 para iniciar com o sistema
-echo -e "\n${YELLOW}Configurando PM2 para iniciar com o sistema...${NC}"
-pm2 startup | tail -n 1 | bash
-
-echo -e "\n${GREEN}Instalação concluída com sucesso!${NC}"
-
-# Perguntar se deseja instalar SSL
-echo -e "\n${YELLOW}Deseja instalar SSL (https://) agora? (S/n): ${NC}"
-read install_ssl
-if [[ ! $install_ssl =~ ^[Nn] ]]; then
-    echo -e "\n${YELLOW}Instalando Certbot e configurando SSL...${NC}"
-    sudo apt install -y certbot python3-certbot-nginx
-    sudo certbot --nginx -d $DOMAIN
-fi
-
-# Mostrar informações finais
-echo -e "\n${GREEN}=== Informações Importantes ===${NC}"
-echo -e "Guarde estas informações em local seguro:"
-echo -e "\n${YELLOW}Diretórios:${NC}"
-echo "Aplicação: $APP_DIR"
-echo "Frontend: $APP_DIR/frontend"
-echo "Backend: $APP_DIR/backend"
-
-echo -e "\n${YELLOW}Próximos passos:${NC}"
-echo "1. Configure seu domínio DNS para apontar para este servidor"
-echo "2. Acesse o sistema em: http://$DOMAIN"
-echo "3. Faça login com as credenciais padrão e altere a senha"
-echo "4. Configure o firewall se necessário"
-
-# Salvar informações em arquivo
-echo -e "\n${YELLOW}Salvando informações de instalação...${NC}"
-INSTALL_INFO="$APP_DIR/install_info.txt"
-cat > $INSTALL_INFO << EOL
-=== ContaCerta - Informações de Instalação ===
-Data: $(date)
-
-Ambiente: $NODE_ENV
-Domínio: $DOMAIN
-Diretório: $APP_DIR
-
-MySQL:
-- Database: $MYSQL_DATABASE
-- Root User: root
-EOL
-
-if [ "$MYSQL_USER" != "root" ]; then
-    cat >> $INSTALL_INFO << EOL
-- App User: $MYSQL_USER
-EOL
-fi
-
-cat >> $INSTALL_INFO << EOL
-
-JWT Secret: $JWT_SECRET
-
-Mantenha este arquivo em local seguro!
-EOL
-
-chmod 600 $INSTALL_INFO
-echo -e "Informações salvas em: $INSTALL_INFO"
+# Iniciar instalação
+main
