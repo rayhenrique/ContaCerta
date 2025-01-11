@@ -152,6 +152,12 @@ echo -e "\n${YELLOW}Configurando backend...${NC}"
 cd $APP_DIR/backend
 npm install
 
+# Verificar se a instalação do backend foi bem sucedida
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Erro ao instalar dependências do backend${NC}"
+    exit 1
+fi
+
 # Criar arquivo .env
 cat > .env << EOL
 NODE_ENV=$NODE_ENV
@@ -167,10 +173,22 @@ EOL
 echo -e "\n${YELLOW}Executando migrações do banco de dados...${NC}"
 npx sequelize-cli db:migrate
 
+# Verificar se as migrações foram bem sucedidas
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Erro ao executar migrações${NC}"
+    exit 1
+fi
+
 # Configurar frontend
 echo -e "\n${YELLOW}Configurando frontend...${NC}"
 cd $APP_DIR/frontend
 npm install
+
+# Verificar se a instalação do frontend foi bem sucedida
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Erro ao instalar dependências do frontend${NC}"
+    exit 1
+fi
 
 # Criar arquivo .env
 cat > .env << EOL
@@ -178,7 +196,14 @@ REACT_APP_API_URL=http://$DOMAIN/api
 EOL
 
 # Build do frontend
+echo -e "\n${YELLOW}Gerando build do frontend...${NC}"
 npm run build
+
+# Verificar se o build foi bem sucedido
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Erro ao gerar build do frontend${NC}"
+    exit 1
+fi
 
 # Configurar Nginx
 echo -e "\n${YELLOW}Configurando Nginx...${NC}"
@@ -216,9 +241,33 @@ sudo nginx -t && sudo systemctl restart nginx
 # Iniciar aplicação com PM2
 echo -e "\n${YELLOW}Iniciando aplicação...${NC}"
 cd $APP_DIR/backend
+
+# Verificar se o arquivo server.js existe
+if [ ! -f "src/server.js" ]; then
+    echo -e "${RED}Erro: Arquivo src/server.js não encontrado${NC}"
+    exit 1
+fi
+
+# Parar instância anterior se existir
+pm2 delete contacerta-backend 2>/dev/null
+
+# Iniciar com PM2
+echo -e "\n${YELLOW}Iniciando servidor com PM2...${NC}"
 pm2 start src/server.js --name contacerta-backend
+
+# Verificar se o processo iniciou
+if ! pm2 show contacerta-backend > /dev/null 2>&1; then
+    echo -e "${RED}Erro ao iniciar o servidor com PM2${NC}"
+    exit 1
+fi
+
+# Salvar configuração do PM2
+echo -e "\n${YELLOW}Salvando configuração do PM2...${NC}"
 pm2 save
-pm2 startup
+
+# Configurar PM2 para iniciar com o sistema
+echo -e "\n${YELLOW}Configurando PM2 para iniciar com o sistema...${NC}"
+pm2 startup | tail -n 1 | bash
 
 echo -e "\n${GREEN}Instalação concluída com sucesso!${NC}"
 
