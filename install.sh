@@ -12,57 +12,73 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Função para verificar memória disponível
-check_memory() {
-    local available_mem=$(free -m | awk '/^Mem:/{print $7}')
-    if [ $available_mem -lt 100 ]; then
-        echo -e "${YELLOW}Pouca memória disponível ($available_mem MB). Configurando SWAP...${NC}"
-        return 1
-    fi
-    return 0
+# Função para gerar senha aleatória
+generate_password() {
+    openssl rand -base64 12
 }
 
-# Configurar SWAP
-setup_swap() {
-    if [ ! -f /swapfile ]; then
-        echo -e "${YELLOW}Configurando SWAP...${NC}"
-        fallocate -l 1G /swapfile
-        chmod 600 /swapfile
-        mkswap /swapfile
-        swapon /swapfile
-        echo '/swapfile none swap sw 0 0' >> /etc/fstab
-        echo 'vm.swappiness=10' >> /etc/sysctl.conf
-        echo 'vm.vfs_cache_pressure=50' >> /etc/sysctl.conf
-        sysctl -p
-    fi
+# Função para solicitar input do usuário
+get_input() {
+    local prompt=$1
+    local default=$2
+    local value=""
+    
+    echo -ne "${YELLOW}$prompt ${NC}[$default]: "
+    read value
+    echo "${value:-$default}"
 }
 
-# Limpar processos e cache
-clean_system() {
-    echo -e "${YELLOW}Limpando sistema...${NC}"
-    sync; echo 3 > /proc/sys/vm/drop_caches
-    systemctl stop apache2 2>/dev/null
-    systemctl disable apache2 2>/dev/null
-}
+# Configurações iniciais
+echo -e "${GREEN}=== ContaCerta - Assistente de Instalação ===${NC}\n"
 
-# Instalar dependências básicas
-echo -e "${YELLOW}Instalando dependências básicas...${NC}"
-apt update
-apt install -y curl wget git software-properties-common
+# Solicitar configurações do usuário
+DOMAIN=$(get_input "Digite o domínio (ou IP) do servidor" "localhost")
+MYSQL_ROOT_PASSWORD=$(generate_password)
+MYSQL_USER="contacerta"
+MYSQL_PASSWORD=$(generate_password)
+MYSQL_DATABASE="contacerta"
+JWT_SECRET=$(openssl rand -base64 32)
+NODE_ENV="production"
+APP_DIR="/var/www/ContaCerta"
 
-# Verificar e configurar SWAP se necessário
-check_memory || setup_swap
+# Mostrar resumo
+echo -e "\n${GREEN}Resumo da instalação:${NC}"
+echo -e "Domínio: $DOMAIN"
+echo -e "Diretório: $APP_DIR"
+echo -e "Banco de dados: $MYSQL_DATABASE"
+echo -e "Usuário BD: $MYSQL_USER"
+echo -e "\nAs senhas serão salvas em /root/.contacerta_credentials ao final da instalação"
 
-# Limpar sistema
-clean_system
+echo -ne "\n${YELLOW}Continuar com a instalação? (S/n): ${NC}"
+read confirm
+if [[ $confirm =~ ^[Nn] ]]; then
+    echo -e "${RED}Instalação cancelada pelo usuário${NC}"
+    exit 1
+fi
 
-# Configurar MySQL otimizado
-setup_mysql() {
-    echo -e "${YELLOW}Instalando e configurando MySQL...${NC}"
-    apt install -y mysql-server
+# Atualizar sistema
+echo -e "\n${YELLOW}Atualizando sistema...${NC}"
+apt update && apt upgrade -y
 
-    # Configuração otimizada do MySQL
-    cat > /etc/mysql/mysql.conf.d/mysqld.cnf << EOL
+# Instalar dependências
+echo -e "\n${YELLOW}Instalando dependências...${NC}"
+apt install -y curl git nginx software-properties-common
+
+# Instalar Node.js
+echo -e "\n${YELLOW}Instalando Node.js...${NC}"
+curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+apt install -y nodejs
+
+# Instalar PM2
+echo -e "\n${YELLOW}Instalando PM2...${NC}"
+npm install -g pm2
+
+# Configurar MySQL
+echo -e "\n${YELLOW}Instalando e configurando MySQL...${NC}"
+apt install -y mysql-server
+
+# Configuração otimizada do MySQL
+cat > /etc/mysql/mysql.conf.d/mysqld.cnf << EOL
 [mysqld]
 # Configurações básicas
 user            = mysql
@@ -74,96 +90,84 @@ datadir         = /var/lib/mysql
 tmpdir          = /tmp
 bind-address    = 127.0.0.1
 
-# Otimizações para baixa memória
-performance_schema = off
-skip-name-resolve
-max_connections = 10
-key_buffer_size = 8M
-innodb_buffer_pool_size = 32M
-innodb_log_buffer_size = 1M
-query_cache_size = 4M
-tmp_table_size = 4M
-max_heap_table_size = 4M
-thread_cache_size = 4
-sort_buffer_size = 256K
-read_buffer_size = 256K
-read_rnd_buffer_size = 256K
-join_buffer_size = 256K
-net_buffer_length = 2K
-
-# InnoDB específico
-innodb_file_per_table = 1
-innodb_flush_method = O_DIRECT
-innodb_flush_log_at_trx_commit = 0
+# Otimizações para 1GB RAM
+key_buffer_size = 128M
+max_connections = 75
+innodb_buffer_pool_size = 256M
+innodb_log_buffer_size = 8M
+query_cache_size = 32M
+tmp_table_size = 32M
+max_heap_table_size = 32M
+thread_cache_size = 8
 EOL
 
-    systemctl restart mysql
-    systemctl enable mysql
-}
-
-# Instalar Node.js
-setup_nodejs() {
-    echo -e "${YELLOW}Instalando Node.js...${NC}"
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-    apt install -y nodejs
-    npm install -g pm2
-}
-
-# Instalar Nginx
-setup_nginx() {
-    echo -e "${YELLOW}Instalando Nginx...${NC}"
-    apt install -y nginx
-    systemctl enable nginx
-}
+systemctl restart mysql
+systemctl enable mysql
 
 # Configurar banco de dados
-setup_database() {
-    local db_pass=$(openssl rand -base64 12)
-    echo -e "${YELLOW}Configurando banco de dados...${NC}"
-    
-    mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$db_pass';"
-    mysql -e "CREATE DATABASE IF NOT EXISTS contacerta;"
-    mysql -e "FLUSH PRIVILEGES;"
-    
-    echo "DB_PASS=$db_pass" > /tmp/db_credentials
-}
+echo -e "\n${YELLOW}Configurando banco de dados...${NC}"
+mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
+mysql -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;"
+mysql -e "CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';"
+mysql -e "GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'localhost';"
+mysql -e "FLUSH PRIVILEGES;"
 
-# Configurar aplicação
-setup_application() {
-    echo -e "${YELLOW}Configurando aplicação...${NC}"
-    local db_pass=$(cat /tmp/db_credentials | cut -d= -f2)
-    local jwt_secret=$(openssl rand -base64 32)
-    
-    cd /var/www/ContaCerta/backend
-    
-    # Configurar variáveis de ambiente
-    cat > .env << EOL
-NODE_ENV=production
+# Clonar repositório
+echo -e "\n${YELLOW}Clonando repositório...${NC}"
+mkdir -p $APP_DIR
+cd /var/www
+GITHUB_TOKEN="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"
+git clone https://${GITHUB_TOKEN}@github.com/rayhenrique/ContaCerta.git
+chown -R www-data:www-data $APP_DIR
+
+# Configurar backend
+echo -e "\n${YELLOW}Configurando backend...${NC}"
+cd $APP_DIR/backend
+npm install
+
+# Criar arquivo .env do backend
+cat > .env << EOL
+NODE_ENV=$NODE_ENV
 DB_HOST=localhost
-DB_USER=root
-DB_PASS=$db_pass
-DB_NAME=contacerta
-JWT_SECRET=$jwt_secret
+DB_USER=$MYSQL_USER
+DB_PASS=$MYSQL_PASSWORD
+DB_NAME=$MYSQL_DATABASE
+JWT_SECRET=$JWT_SECRET
 PORT=3001
 EOL
 
-    # Instalar dependências e executar migrações
-    npm install
-    npx sequelize-cli db:migrate
-}
+# Executar migrações
+echo -e "\n${YELLOW}Executando migrações...${NC}"
+npx sequelize-cli db:migrate
+
+# Configurar frontend
+echo -e "\n${YELLOW}Configurando frontend...${NC}"
+cd $APP_DIR/frontend
+npm install
+
+# Criar arquivo .env do frontend
+cat > .env << EOL
+REACT_APP_API_URL=http://$DOMAIN/api
+EOL
+
+# Build do frontend
+npm run build
 
 # Configurar Nginx
-setup_nginx_config() {
-    cat > /etc/nginx/sites-available/contacerta << EOL
+echo -e "\n${YELLOW}Configurando Nginx...${NC}"
+cat > /etc/nginx/sites-available/contacerta << EOL
 server {
     listen 80;
-    server_name _;
+    server_name $DOMAIN;
 
+    # Frontend
     location / {
-        root /var/www/ContaCerta/frontend/build;
+        root $APP_DIR/frontend/build;
         try_files \$uri \$uri/ /index.html;
+        add_header Cache-Control "no-cache";
     }
 
+    # Backend API
     location /api {
         proxy_pass http://localhost:3001;
         proxy_http_version 1.1;
@@ -171,43 +175,59 @@ server {
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
         proxy_cache_bypass \$http_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
+
+    # Segurança
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-XSS-Protection "1; mode=block";
+    add_header X-Content-Type-Options "nosniff";
 }
 EOL
 
-    ln -sf /etc/nginx/sites-available/contacerta /etc/nginx/sites-enabled/
-    rm -f /etc/nginx/sites-enabled/default
-    nginx -t && systemctl restart nginx
-}
+ln -sf /etc/nginx/sites-available/contacerta /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl restart nginx
 
-# Função principal de instalação
-main() {
-    clean_system
-    setup_swap
-    setup_mysql
-    setup_nodejs
-    setup_nginx
-    
-    # Clonar repositório
-    mkdir -p /var/www
-    cd /var/www
-    git clone https://github.com/rayhenrique/ContaCerta.git
-    
-    setup_database
-    setup_application
-    setup_nginx_config
-    
-    # Iniciar aplicação
-    cd /var/www/ContaCerta/backend
-    pm2 start npm --name "contacerta-api" -- start --max-memory-restart 150M
-    pm2 save
-    
-    # Limpar
-    rm -f /tmp/db_credentials
-    
-    echo -e "${GREEN}Instalação concluída!${NC}"
-    echo -e "Acesse: http://seu_ip"
-}
+# Iniciar aplicação com PM2
+echo -e "\n${YELLOW}Iniciando aplicação...${NC}"
+cd $APP_DIR/backend
+pm2 start src/server.js --name contacerta-api
+pm2 save
+pm2 startup | bash
 
-# Iniciar instalação
-main
+# Salvar credenciais
+echo -e "\n${YELLOW}Salvando credenciais...${NC}"
+cat > /root/.contacerta_credentials << EOL
+=== ContaCerta - Credenciais ===
+Data da instalação: $(date)
+
+MySQL Root Password: $MYSQL_ROOT_PASSWORD
+MySQL User: $MYSQL_USER
+MySQL Password: $MYSQL_PASSWORD
+Database: $MYSQL_DATABASE
+JWT Secret: $JWT_SECRET
+EOL
+
+chmod 600 /root/.contacerta_credentials
+
+# Configurar firewall
+echo -e "\n${YELLOW}Configurando firewall...${NC}"
+ufw allow 22
+ufw allow 80
+ufw allow 443
+ufw --force enable
+
+echo -e "\n${GREEN}Instalação concluída com sucesso!${NC}"
+echo -e "\n${YELLOW}Informações importantes:${NC}"
+echo "1. As credenciais foram salvas em /root/.contacerta_credentials"
+echo "2. Acesse a aplicação em: http://$DOMAIN"
+echo "3. Para instalar SSL, execute: certbot --nginx -d $DOMAIN"
+echo "4. Para ver os logs: pm2 logs contacerta-api"
+
+# Mostrar status dos serviços
+echo -e "\n${YELLOW}Status dos serviços:${NC}"
+systemctl status mysql --no-pager
+systemctl status nginx --no-pager
+pm2 status
