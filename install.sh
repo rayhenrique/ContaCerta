@@ -32,7 +32,8 @@ get_input() {
 echo -e "${GREEN}=== ContaCerta - Assistente de Instalação ===${NC}\n"
 
 # Solicitar configurações do usuário
-DOMAIN=$(get_input "Digite o domínio (ou IP) do servidor" "localhost")
+echo -e "${YELLOW}Digite o domínio ou IP do servidor onde a aplicação será acessada${NC}"
+DOMAIN=$(get_input "Domínio/IP" "localhost")
 MYSQL_ROOT_PASSWORD=$(generate_password)
 MYSQL_USER="contacerta"
 MYSQL_PASSWORD=$(generate_password)
@@ -77,6 +78,14 @@ npm install -g pm2
 echo -e "\n${YELLOW}Instalando e configurando MySQL...${NC}"
 apt install -y mysql-server
 
+# Garantir que o diretório do MySQL existe
+mkdir -p /var/run/mysqld
+chown mysql:mysql /var/run/mysqld
+chmod 755 /var/run/mysqld
+
+# Parar MySQL se estiver rodando
+systemctl stop mysql
+
 # Configuração otimizada do MySQL
 cat > /etc/mysql/mysql.conf.d/mysqld.cnf << EOL
 [mysqld]
@@ -101,11 +110,30 @@ max_heap_table_size = 32M
 thread_cache_size = 8
 EOL
 
-systemctl restart mysql
-systemctl enable mysql
+# Iniciar MySQL e aguardar
+systemctl start mysql
+echo -e "${YELLOW}Aguardando MySQL iniciar...${NC}"
+sleep 10
+
+# Verificar status do MySQL
+if ! systemctl is-active --quiet mysql; then
+    echo -e "${RED}Erro: MySQL não está rodando. Verificando logs...${NC}"
+    journalctl -xe --unit mysql.service
+    exit 1
+fi
 
 # Configurar banco de dados
 echo -e "\n${YELLOW}Configurando banco de dados...${NC}"
+if ! mysql -e "SELECT 1"; then
+    echo -e "${RED}Erro: Não foi possível conectar ao MySQL. Tentando reiniciar...${NC}"
+    systemctl restart mysql
+    sleep 5
+    if ! mysql -e "SELECT 1"; then
+        echo -e "${RED}Erro crítico: MySQL não está respondendo${NC}"
+        exit 1
+    fi
+fi
+
 mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
 mysql -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;"
 mysql -e "CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';"
