@@ -1,0 +1,14 @@
+{
+  "name": "contacerta",
+  "version": "1.0.0",
+  "description": "ContaCerta - Sistema de Gestão Financeira",
+  "scripts": {
+    "start": "concurrently \"cd backend && npm start\" \"cd frontend && npm start\"",
+    "install-all": "npm install && cd frontend && npm install && cd ../backend && npm install"
+  },
+  "author": "KL Tecnologia",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
