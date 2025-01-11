@@ -27,15 +27,15 @@ const theme = createTheme(
 
 const App: React.FC = () => {
   return (
-    <ThemeProvider theme={theme}>
-      <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={dateFnsPtBR}>
-        <BrowserRouter>
+    <BrowserRouter>
+      <ThemeProvider theme={theme}>
+        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={dateFnsPtBR}>
           <AuthProvider>
             <AppRoutes />
           </AuthProvider>
-        </BrowserRouter>
-      </LocalizationProvider>
-    </ThemeProvider>
+        </LocalizationProvider>
+      </ThemeProvider>
+    </BrowserRouter>
   );
 };
 

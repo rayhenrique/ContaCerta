@@ -16,33 +16,10 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { ptBR } from 'date-fns/locale';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-} from 'chart.js';
 import { Line, Bar, Pie } from 'react-chartjs-2';
 import { format } from 'date-fns';
+import { lineChartOptions, barChartOptions, pieChartOptions } from '../config/chartConfig';
 import api from '../services/api';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend
-);
 
 interface Category {
   id: number;
@@ -324,21 +301,21 @@ const Reports: React.FC = () => {
                 <Typography variant="h6" gutterBottom>
                   Evolução de Receitas e Despesas
                 </Typography>
-                {lineChartData && <Line data={lineChartData} />}
+                {lineChartData && <Line data={lineChartData} options={lineChartOptions} />}
               </Grid>
 
               <Grid item xs={12} md={6}>
                 <Typography variant="h6" gutterBottom>
                   Receitas por Categoria
                 </Typography>
-                {pieChartDataRevenues && <Pie data={pieChartDataRevenues} />}
+                {pieChartDataRevenues && <Pie data={pieChartDataRevenues} options={pieChartOptions} />}
               </Grid>
 
               <Grid item xs={12} md={6}>
                 <Typography variant="h6" gutterBottom>
                   Despesas por Categoria
                 </Typography>
-                {pieChartDataExpenses && <Pie data={pieChartDataExpenses} />}
+                {pieChartDataExpenses && <Pie data={pieChartDataExpenses} options={pieChartOptions} />}
               </Grid>
             </Grid>
           </>

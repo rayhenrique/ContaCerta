@@ -9,6 +9,14 @@ interface User {
   accessLevel: 'admin' | 'operator';
 }
 
+interface AuthError extends Error {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+}
+
 interface AuthContextData {
   user: User | null;
   loading: boolean;
@@ -25,18 +33,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const loadStoredData = async () => {
-      const storedToken = localStorage.getItem('@ContaCerta:token');
-      const storedUser = localStorage.getItem('@ContaCerta:user');
+      try {
+        const storedToken = localStorage.getItem('@ContaCerta:token');
+        const storedUser = localStorage.getItem('@ContaCerta:user');
 
-      if (storedToken && storedUser) {
-        console.log('Token encontrado:', storedToken);
-        api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-        setUser(JSON.parse(storedUser));
-      } else {
-        console.log('Nenhum token encontrado');
+        if (storedToken && storedUser) {
+          api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+          setUser(JSON.parse(storedUser));
+        }
+      } catch (error) {
+        localStorage.removeItem('@ContaCerta:token');
+        localStorage.removeItem('@ContaCerta:user');
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     loadStoredData();
@@ -44,13 +54,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (email: string, password: string) => {
     try {
-      console.log('AuthContext: Iniciando login...');
       const response = await api.post('/auth/login', {
         email,
         password,
       });
 
-      console.log('AuthContext: Resposta do servidor:', response.data);
       const { token, user: userData } = response.data;
 
       localStorage.setItem('@ContaCerta:token', token);
@@ -58,16 +66,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(userData);
-      console.log('AuthContext: Login concluído com sucesso');
       navigate('/');
     } catch (error) {
-      console.error('AuthContext: Erro no login:', error);
-      throw error;
+      const authError = error as AuthError;
+      const errorMessage = authError.response?.data?.message || 'Erro ao fazer login. Verifique suas credenciais.';
+      throw new Error(errorMessage);
     }
   };
 
   const signOut = () => {
-    console.log('AuthContext: Fazendo logout...');
     localStorage.removeItem('@ContaCerta:token');
     localStorage.removeItem('@ContaCerta:user');
     setUser(null);

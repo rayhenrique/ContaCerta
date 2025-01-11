@@ -10,13 +10,14 @@ import Expenses from '../pages/Expenses';
 import Reports from '../pages/Reports';
 import Profile from '../pages/Profile';
 import UserManual from '../pages/UserManual';
+import Loading from '../components/Loading';
 import { useAuth } from '../contexts/AuthContext';
 
 const AppRoutes: React.FC = () => {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <div>Carregando...</div>;
+    return <Loading />;
   }
 
   if (!user) {

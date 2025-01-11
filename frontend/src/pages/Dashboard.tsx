@@ -14,27 +14,8 @@ import {
   TrendingUp,
 } from '@mui/icons-material';
 import { Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
+import { lineChartOptions } from '../config/chartConfig';
 import api from '../services/api';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-);
 
 interface DashboardData {
   totalRevenue: number;
@@ -113,61 +94,7 @@ const Dashboard: React.FC = () => {
     ],
   };
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: true,
-    height: 400,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-        labels: {
-          font: {
-            size: 12,
-            weight: 500,
-          },
-          usePointStyle: true,
-          padding: 20,
-        },
-      },
-      title: {
-        display: false,
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        grid: {
-          color: 'rgba(0, 0, 0, 0.05)',
-        },
-        ticks: {
-          font: {
-            size: 12,
-          },
-        },
-      },
-      x: {
-        grid: {
-          display: false,
-        },
-        ticks: {
-          font: {
-            size: 12,
-          },
-        },
-      },
-    },
-    interaction: {
-      mode: 'index' as const,
-      intersect: false,
-    },
-    elements: {
-      point: {
-        radius: 0,
-        hitRadius: 10,
-        hoverRadius: 5,
-      },
-    },
-  };
+  const chartOptions = lineChartOptions;
 
   const calculateConservativeProjection = () => {
     const SAFETY_MARGIN = 0.1; // 10% de margem de segurança
