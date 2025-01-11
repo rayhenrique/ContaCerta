@@ -6,44 +6,93 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Configurações
-APP_DIR="/var/www/ContaCerta"
-DOMAIN="seu_dominio.com"
-MYSQL_ROOT_PASSWORD="sua_senha_root"
-MYSQL_USER="contacerta"
-MYSQL_PASSWORD="sua_senha_db"
-MYSQL_DATABASE="contacerta"
-JWT_SECRET="seu_jwt_secret"
-NODE_ENV="production"
+# Função para solicitar input do usuário
+get_input() {
+    local prompt=$1
+    local default=$2
+    local value=""
+    
+    echo -ne "${YELLOW}$prompt ${NC}[$default]: "
+    read value
+    echo "${value:-$default}"
+}
 
-echo -e "${GREEN}Iniciando instalação do ContaCerta...${NC}"
+# Função para solicitar senha
+get_password() {
+    local prompt=$1
+    local password=""
+    
+    echo -ne "${YELLOW}$prompt ${NC}"
+    read -s password
+    echo
+    echo "$password"
+}
+
+clear
+echo -e "${GREEN}=== ContaCerta - Assistente de Instalação ===${NC}\n"
+
+# Solicitar configurações
+echo -e "${GREEN}Configuração do Ambiente${NC}"
+echo -e "------------------------"
+DOMAIN=$(get_input "Digite o domínio do site" "localhost")
+NODE_ENV=$(get_input "Ambiente (production/development)" "production")
+
+echo -e "\n${GREEN}Configuração do MySQL${NC}"
+echo -e "------------------------"
+MYSQL_ROOT_PASSWORD=$(get_password "Digite a senha do root do MySQL: ")
+MYSQL_DATABASE=$(get_input "Nome do banco de dados" "contacerta")
+MYSQL_USER=$(get_input "Usuário do banco de dados" "contacerta")
+MYSQL_PASSWORD=$(get_password "Senha do usuário do banco de dados: ")
+
+echo -e "\n${GREEN}Configuração da Aplicação${NC}"
+echo -e "------------------------"
+APP_DIR=$(get_input "Diretório de instalação" "/var/www/ContaCerta")
+JWT_SECRET=$(get_password "Chave secreta para JWT: ")
+
+# Confirmar configurações
+echo -e "\n${GREEN}Revise as configurações:${NC}"
+echo -e "------------------------"
+echo -e "Domínio: $DOMAIN"
+echo -e "Ambiente: $NODE_ENV"
+echo -e "Banco de Dados: $MYSQL_DATABASE"
+echo -e "Usuário BD: $MYSQL_USER"
+echo -e "Diretório: $APP_DIR"
+
+echo -ne "\n${YELLOW}As configurações estão corretas? (S/n): ${NC}"
+read confirm
+if [[ $confirm =~ ^[Nn] ]]; then
+    echo -e "${RED}Instalação cancelada pelo usuário${NC}"
+    exit 1
+fi
+
+echo -e "\n${GREEN}Iniciando instalação...${NC}"
 
 # Atualizar sistema
-echo -e "${YELLOW}Atualizando sistema...${NC}"
+echo -e "\n${YELLOW}Atualizando sistema...${NC}"
 sudo apt update
 sudo apt upgrade -y
 
 # Instalar dependências
-echo -e "${YELLOW}Instalando dependências...${NC}"
+echo -e "\n${YELLOW}Instalando dependências...${NC}"
 sudo apt install -y curl git nginx software-properties-common
 
 # Instalar Node.js
-echo -e "${YELLOW}Instalando Node.js...${NC}"
+echo -e "\n${YELLOW}Instalando Node.js...${NC}"
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # Instalar PM2
-echo -e "${YELLOW}Instalando PM2...${NC}"
+echo -e "\n${YELLOW}Instalando PM2...${NC}"
 sudo npm install -g pm2
 
 # Instalar MySQL
-echo -e "${YELLOW}Instalando MySQL...${NC}"
+echo -e "\n${YELLOW}Instalando MySQL...${NC}"
 sudo apt install -y mysql-server
 sudo systemctl start mysql
 sudo systemctl enable mysql
 
 # Configurar MySQL
-echo -e "${YELLOW}Configurando MySQL...${NC}"
+echo -e "\n${YELLOW}Configurando MySQL...${NC}"
 sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
 sudo mysql -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;"
 sudo mysql -e "CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';"
@@ -51,13 +100,13 @@ sudo mysql -e "GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'local
 sudo mysql -e "FLUSH PRIVILEGES;"
 
 # Clonar repositório
-echo -e "${YELLOW}Clonando repositório...${NC}"
+echo -e "\n${YELLOW}Clonando repositório...${NC}"
 sudo mkdir -p $APP_DIR
 sudo chown -R $USER:$USER $APP_DIR
 git clone https://github.com/rayhenrique/ContaCerta.git $APP_DIR
 
 # Configurar backend
-echo -e "${YELLOW}Configurando backend...${NC}"
+echo -e "\n${YELLOW}Configurando backend...${NC}"
 cd $APP_DIR/backend
 npm install
 
@@ -73,11 +122,11 @@ PORT=3001
 EOL
 
 # Executar migrações
-echo -e "${YELLOW}Executando migrações do banco de dados...${NC}"
+echo -e "\n${YELLOW}Executando migrações do banco de dados...${NC}"
 npx sequelize-cli db:migrate
 
 # Configurar frontend
-echo -e "${YELLOW}Configurando frontend...${NC}"
+echo -e "\n${YELLOW}Configurando frontend...${NC}"
 cd $APP_DIR/frontend
 npm install
 
@@ -90,7 +139,7 @@ EOL
 npm run build
 
 # Configurar Nginx
-echo -e "${YELLOW}Configurando Nginx...${NC}"
+echo -e "\n${YELLOW}Configurando Nginx...${NC}"
 sudo tee /etc/nginx/sites-available/contacerta << EOL
 server {
     listen 80;
@@ -123,14 +172,24 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl restart nginx
 
 # Iniciar aplicação com PM2
-echo -e "${YELLOW}Iniciando aplicação...${NC}"
+echo -e "\n${YELLOW}Iniciando aplicação...${NC}"
 cd $APP_DIR/backend
 pm2 start src/server.js --name contacerta-backend
 pm2 save
 pm2 startup
 
-echo -e "${GREEN}Instalação concluída!${NC}"
-echo -e "${YELLOW}Não esqueça de:${NC}"
-echo "1. Configurar SSL com Certbot"
-echo "2. Ajustar as senhas em produção"
-echo "3. Verificar as configurações de firewall"
+echo -e "\n${GREEN}Instalação concluída com sucesso!${NC}"
+echo -e "\n${YELLOW}Próximos passos:${NC}"
+echo "1. Configure SSL com: sudo certbot --nginx -d $DOMAIN"
+echo "2. Verifique se a aplicação está rodando em: http://$DOMAIN"
+echo "3. Faça login com as credenciais padrão e altere a senha"
+echo "4. Configure o firewall se necessário"
+
+# Perguntar se deseja instalar SSL
+echo -ne "\n${YELLOW}Deseja instalar SSL agora? (S/n): ${NC}"
+read install_ssl
+if [[ ! $install_ssl =~ ^[Nn] ]]; then
+    echo -e "\n${YELLOW}Instalando Certbot e configurando SSL...${NC}"
+    sudo apt install -y certbot python3-certbot-nginx
+    sudo certbot --nginx -d $DOMAIN
+fi

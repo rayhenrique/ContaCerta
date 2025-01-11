@@ -321,27 +321,46 @@ fi
 
 ### Uso dos Scripts
 
-1. **Instalação Inicial**:
+### Instalação Inicial
+
+O script de instalação é interativo e guiará você através do processo:
+
 ```bash
 # Fazer download do script
 wget https://raw.githubusercontent.com/rayhenrique/ContaCerta/main/install.sh
 chmod +x install.sh
 
-# Editar variáveis (importante!)
-nano install.sh
-
 # Executar instalação
 ./install.sh
 ```
 
-2. **Atualizações**:
+O script solicitará as seguintes informações:
+
+1. **Configuração do Ambiente**:
+   - Domínio do site
+   - Ambiente (production/development)
+
+2. **Configuração do MySQL**:
+   - Senha do root
+   - Nome do banco de dados
+   - Usuário do banco
+   - Senha do usuário
+
+3. **Configuração da Aplicação**:
+   - Diretório de instalação
+   - Chave secreta para JWT
+
+Após confirmar as configurações, o script irá:
+- Instalar todas as dependências
+- Configurar o ambiente
+- Instalar e configurar SSL (opcional)
+- Iniciar todos os serviços
+
+### Atualizações
 ```bash
 # Fazer download do script
 wget https://raw.githubusercontent.com/rayhenrique/ContaCerta/main/update.sh
 chmod +x update.sh
-
-# Editar variáveis (importante!)
-nano update.sh
 
 # Executar atualização
 ./update.sh
