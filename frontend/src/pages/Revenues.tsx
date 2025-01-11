@@ -26,6 +26,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { canManageReceita } from '../utils/permissions';
 import api from '../services/api';
 import { User } from '../types/user';
 import { NumericFormat, NumberFormatValues } from 'react-number-format';
@@ -397,7 +398,7 @@ const Revenues: React.FC = () => {
           <Button
             variant="contained"
             onClick={handleOpenDialog}
-            disabled={user?.accessLevel !== 'admin'}
+            disabled={!canManageReceita(user)}
           >
             Nova Receita
           </Button>

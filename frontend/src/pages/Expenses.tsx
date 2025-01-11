@@ -17,6 +17,7 @@ import {
   Alert,
   Grid,
   Chip,
+  InputAdornment,
   SelectChangeEvent,
 } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
@@ -25,8 +26,8 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { canManageDespesa } from '../utils/permissions';
 import api from '../services/api';
-import { NumericFormat } from 'react-number-format';
 
 interface Category {
   id: number;
@@ -395,7 +396,7 @@ const Expenses: React.FC = () => {
           <Button
             variant="contained"
             onClick={handleOpenDialog}
-            disabled={user?.accessLevel !== 'admin'}
+            disabled={!canManageDespesa(user)}
           >
             Nova Despesa
           </Button>
@@ -438,21 +439,16 @@ const Expenses: React.FC = () => {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <NumericFormat
-                  customInput={TextField}
-                  label="Valor"
+                <TextField
                   fullWidth
+                  label="Valor"
+                  name="value"
                   value={formData.value}
-                  onValueChange={(values) => {
-                    handleNumericChange(values.formattedValue);
-                  }}
-                  thousandSeparator="."
-                  decimalSeparator=","
-                  prefix="R$ "
-                  decimalScale={2}
-                  fixedDecimalScale
+                  onChange={handleInputChange}
                   required
-                  allowNegative={false}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                  }}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
