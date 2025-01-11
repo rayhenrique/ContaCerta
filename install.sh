@@ -247,6 +247,29 @@ ufw allow 80
 ufw allow 443
 ufw --force enable
 
+# Instalar e configurar SSL
+echo -e "\n${YELLOW}Instalando Certbot...${NC}"
+apt install -y certbot python3-certbot-nginx
+
+# Verificar se um domínio válido foi fornecido (não é IP)
+if [[ $DOMAIN =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo -e "${YELLOW}IP detectado ($DOMAIN). Pulando configuração SSL...${NC}"
+else
+    echo -e "${YELLOW}Configurando SSL para $DOMAIN...${NC}"
+    # Verificar se o domínio está apontando para este servidor
+    SERVER_IP=$(curl -s ifconfig.me)
+    DOMAIN_IP=$(dig +short $DOMAIN)
+    
+    if [ "$SERVER_IP" = "$DOMAIN_IP" ]; then
+        certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email admin@$DOMAIN --redirect
+        echo -e "${GREEN}SSL configurado com sucesso!${NC}"
+    else
+        echo -e "${YELLOW}AVISO: O domínio $DOMAIN não está apontando para este servidor ($SERVER_IP).${NC}"
+        echo -e "${YELLOW}Configure o DNS primeiro e depois execute:${NC}"
+        echo "certbot --nginx -d $DOMAIN"
+    fi
+fi
+
 echo -e "\n${GREEN}Instalação concluída com sucesso!${NC}"
 echo -e "\n${YELLOW}Informações importantes:${NC}"
 echo "1. As credenciais foram salvas em /root/.contacerta_credentials"
