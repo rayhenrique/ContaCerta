@@ -26,6 +26,7 @@ import {
   AccountCircle,
   Logout,
   Person,
+  Help,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -72,34 +73,82 @@ const Layout: React.FC = () => {
 
   return (
     <Box sx={{ display: 'flex' }}>
-      <AppBar position="fixed">
-        <Toolbar>
-          <IconButton
-            color="inherit"
-            aria-label="open drawer"
-            onClick={handleDrawerOpen}
-            edge="start"
-            sx={{ mr: 2 }}
-          >
-            <MenuIcon />
-          </IconButton>
-          <AccountBalanceWallet sx={{ mr: 1 }} />
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            ContaCerta
-          </Typography>
-          <Box>
+      <AppBar
+        position="fixed"
+        sx={{
+          background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
+        }}
+      >
+        <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <IconButton
-              size="large"
+              color="inherit"
+              aria-label="open drawer"
+              onClick={handleDrawerOpen}
+              edge="start"
+              sx={{ mr: 2 }}
+            >
+              <MenuIcon />
+            </IconButton>
+            <Box
+              component="img"
+              src="/logo.svg"
+              alt="ContaCerta Logo"
+              sx={{
+                width: 32,
+                height: 32,
+                mr: 1,
+              }}
+            />
+            <Typography
+              variant="h6"
+              noWrap
+              component="div"
+              sx={{
+                fontWeight: 600,
+                color: 'white',
+              }}
+            >
+              ContaCerta
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Typography
+              variant="body1"
+              sx={{
+                mr: 1,
+                color: 'white',
+                opacity: 0.9,
+              }}
+            >
+              {user?.name}
+            </Typography>
+            <IconButton
+              size="small"
               aria-label="account of current user"
               aria-controls="menu-appbar"
               aria-haspopup="true"
               onClick={handleMenu}
-              color="inherit"
+              sx={{
+                ml: 1,
+                bgcolor: 'rgba(255, 255, 255, 0.1)',
+                '&:hover': {
+                  bgcolor: 'rgba(255, 255, 255, 0.2)',
+                },
+              }}
             >
-              <Typography variant="body1" sx={{ mr: 1 }}>
-                {user?.name}
-              </Typography>
-              <Avatar sx={{ bgcolor: 'secondary.main' }}>
+              <Avatar
+                sx={{
+                  width: 32,
+                  height: 32,
+                  bgcolor: 'transparent',
+                  color: 'white',
+                  fontSize: '0.9rem',
+                  fontWeight: 500,
+                }}
+              >
                 {user?.name?.charAt(0).toUpperCase()}
               </Avatar>
             </IconButton>
@@ -118,6 +167,12 @@ const Layout: React.FC = () => {
               open={Boolean(anchorEl)}
               onClose={handleClose}
             >
+              <MenuItem onClick={() => navigate('/manual')}>
+                <ListItemIcon>
+                  <Help fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>Manual do Usuário</ListItemText>
+              </MenuItem>
               <MenuItem onClick={handleProfile}>
                 <ListItemIcon>
                   <Person fontSize="small" />
@@ -145,10 +200,39 @@ const Layout: React.FC = () => {
           '& .MuiDrawer-paper': {
             width: 240,
             boxSizing: 'border-box',
+            background: '#FFFFFF',
+            boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)',
           },
         }}
       >
-        <Toolbar />
+        <Box
+          sx={{
+            background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+            p: 2,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+          }}
+        >
+          <Box
+            component="img"
+            src="/logo.svg"
+            alt="ContaCerta Logo"
+            sx={{
+              width: 32,
+              height: 32,
+            }}
+          />
+          <Typography
+            variant="h6"
+            sx={{
+              color: 'white',
+              fontWeight: 600,
+            }}
+          >
+            ContaCerta
+          </Typography>
+        </Box>
         <Box sx={{ overflow: 'auto' }}>
           <List>
             {menuItems.map((item) => (
@@ -159,9 +243,24 @@ const Layout: React.FC = () => {
                   navigate(item.path);
                   handleDrawerClose();
                 }}
+                sx={{
+                  mb: 1,
+                  borderRadius: 1,
+                  '&:hover': {
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                  },
+                }}
               >
-                <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
+                <ListItemIcon sx={{ color: '#4F46E5' }}>{item.icon}</ListItemIcon>
+                <ListItemText
+                  primary={item.text}
+                  sx={{
+                    '& .MuiTypography-root': {
+                      fontWeight: 500,
+                      color: '#1F2937',
+                    },
+                  }}
+                />
               </ListItem>
             ))}
           </List>
@@ -184,11 +283,12 @@ const Layout: React.FC = () => {
           position: 'fixed',
           bottom: 0,
           width: '100%',
-          bgcolor: 'background.paper',
+          bgcolor: '#FFFFFF',
           p: 1,
           textAlign: 'center',
           borderTop: '1px solid',
           borderColor: 'divider',
+          boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.05)',
         }}
       >
         <Typography variant="body2" color="text.secondary">

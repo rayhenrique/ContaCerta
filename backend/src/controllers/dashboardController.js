@@ -7,6 +7,8 @@ module.exports = {
       const currentDate = new Date();
       const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
       const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+      const lastDayNextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0);
 
       // Obter total de receitas do mês
       const totalRevenue = await Revenue.sum('value', {
@@ -28,6 +30,46 @@ module.exports = {
 
       // Calcular saldo
       const balance = totalRevenue - totalExpenses;
+
+      // Obter receitas confirmadas para o próximo mês
+      const confirmedRevenues = await Revenue.sum('value', {
+        where: {
+          date: {
+            [Op.between]: [nextMonth, lastDayNextMonth],
+          },
+          status: 'confirmed', // Assumindo que existe um campo status
+        },
+      }) || 0;
+
+      // Obter despesas agendadas para o próximo mês
+      const scheduledExpenses = await Expense.sum('value', {
+        where: {
+          date: {
+            [Op.between]: [nextMonth, lastDayNextMonth],
+          },
+        },
+      }) || 0;
+
+      // Calcular média de despesas variáveis dos últimos 3 meses
+      const threeMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 2, 1);
+      const variableExpenses = await Expense.findAll({
+        attributes: [
+          [Sequelize.fn('MONTH', Sequelize.col('date')), 'month'],
+          [Sequelize.fn('SUM', Sequelize.col('value')), 'total'],
+        ],
+        where: {
+          date: {
+            [Op.between]: [threeMonthsAgo, lastDayOfMonth],
+          },
+          type: 'variable', // Assumindo que existe um campo type para identificar despesas variáveis
+        },
+        group: [Sequelize.fn('MONTH', Sequelize.col('date'))],
+        raw: true,
+      });
+
+      const averageVariableExpenses = variableExpenses.length > 0
+        ? variableExpenses.reduce((acc, curr) => acc + Number(curr.total), 0) / variableExpenses.length
+        : 0;
 
       // Obter dados dos últimos 6 meses para o gráfico
       const last6Months = Array.from({ length: 6 }, (_, i) => {
@@ -128,6 +170,9 @@ module.exports = {
         totalRevenue,
         totalExpenses,
         balance,
+        confirmedRevenues,
+        scheduledExpenses,
+        averageVariableExpenses,
         recentTransactions: allTransactions,
         chartData,
       });

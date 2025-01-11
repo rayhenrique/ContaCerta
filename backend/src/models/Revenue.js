@@ -17,6 +17,16 @@ module.exports = (sequelize) => {
       value: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
+        get() {
+          const rawValue = this.getDataValue('value');
+          return rawValue === null ? null : parseFloat(rawValue);
+        },
+        set(val) {
+          const numericValue = typeof val === 'string' ? 
+            parseFloat(val.replace(',', '.')) : 
+            parseFloat(val);
+          this.setDataValue('value', numericValue);
+        },
       },
       date: {
         type: DataTypes.DATE,
@@ -33,6 +43,14 @@ module.exports = (sequelize) => {
       categoryId: {
         type: DataTypes.INTEGER,
         allowNull: false,
+      },
+      status: {
+        type: DataTypes.STRING,
+        defaultValue: 'pending',
+        allowNull: false,
+        validate: {
+          isIn: [['pending', 'confirmed', 'cancelled']]
+        }
       },
     },
     {

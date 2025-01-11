@@ -1,0 +1,1 @@
+ALTER TABLE Expenses ADD COLUMN status VARCHAR(255) NOT NULL DEFAULT 'pending';

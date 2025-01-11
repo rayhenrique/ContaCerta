@@ -1,6 +1,6 @@
 # ContaCerta - Sistema de Gestão Financeira
 
-O ContaCerta é um sistema de gestão financeira desenvolvido com React (frontend) e Node.js/Express (backend), utilizando MySQL como banco de dados.
+O ContaCerta é um sistema de gestão financeira desenvolvido com React (frontend) e Node.js/Express (backend), utilizando MySQL como banco de dados. O sistema oferece uma gestão completa de receitas e despesas, com projeção mensal conservadora e controle detalhado do fluxo de caixa.
 
 ## Requisitos do Sistema
 
@@ -179,21 +179,62 @@ sudo apt install certbot python3-certbot-nginx -y
 sudo certbot --nginx -d seu_dominio.com
 ```
 
+## Funcionalidades Principais
+
+### Dashboard
+- Visão geral financeira em cards intuitivos
+- Valores formatados no padrão brasileiro (R$ X.XXX,XX)
+- Projeção mensal conservadora com margem de segurança
+- Gráficos de evolução financeira
+- Listagem de transações recentes
+- Legendas explicativas em cada indicador
+
+### Gestão de Receitas
+- Cadastro e edição de receitas
+- Status: Pendente, Confirmada, Cancelada
+- Visualização em formato de grid
+- Filtros e ordenação
+- Campo para observações
+
+### Gestão de Despesas
+- Cadastro e edição de despesas
+- Classificação: Fixa ou Variável
+- Visualização em formato de grid
+- Filtros e ordenação
+- Campo para observações
+
+### Segurança
+- Autenticação de usuários
+- Níveis de acesso (admin/operador)
+- Proteção de rotas
+- Tokens JWT
+- Criptografia de senhas
+
 ## Estrutura do Projeto
 ```
 ContaCerta/
 ├── backend/         # API Node.js/Express
+│   ├── src/
+│   │   ├── controllers/  # Controladores da aplicação
+│   │   ├── models/      # Modelos Sequelize
+│   │   ├── database/    # Migrações e configurações
+│   │   ├── routes/     # Rotas da API
+│   │   └── middleware/ # Middlewares
 ├── frontend/        # Aplicação React
-├── docs/           # Documentação adicional
+│   ├── src/
+│   │   ├── pages/      # Componentes de página
+│   │   ├── components/ # Componentes reutilizáveis
+│   │   ├── contexts/   # Contextos React
+│   │   ├── services/   # Serviços de API
+│   │   └── theme/      # Configuração do tema
+├── docs/           # Documentação
 └── README.md
 ```
 
-## Funcionalidades Principais
-- Autenticação de usuários
-- Gestão de categorias
-- Controle de receitas e despesas
-- Relatórios financeiros
-- Perfis de usuário (admin/operador)
+## Documentação Adicional
+
+- [Documentação Técnica](./docs/technical.md) - Detalhes técnicos do projeto
+- Manual do Usuário - Disponível no menu do usuário na aplicação
 
 ## Suporte
 

@@ -9,38 +9,38 @@ import Revenues from '../pages/Revenues';
 import Expenses from '../pages/Expenses';
 import Reports from '../pages/Reports';
 import Profile from '../pages/Profile';
+import UserManual from '../pages/UserManual';
 import { useAuth } from '../contexts/AuthContext';
 
 const AppRoutes: React.FC = () => {
   const { user, loading } = useAuth();
 
-  console.log('AppRoutes: Estado de autenticação:', { user, loading });
-
   if (loading) {
     return <div>Carregando...</div>;
   }
 
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
   return (
     <Routes>
-      {!user ? (
-        <>
-          <Route path="/login" element={<Login />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </>
-      ) : (
-        <>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="categories" element={<Categories />} />
-            <Route path="users" element={<Users />} />
-            <Route path="revenues" element={<Revenues />} />
-            <Route path="expenses" element={<Expenses />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="profile" element={<Profile />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </>
-      )}
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Dashboard />} />
+        <Route path="categories" element={<Categories />} />
+        <Route path="users" element={<Users />} />
+        <Route path="revenues" element={<Revenues />} />
+        <Route path="expenses" element={<Expenses />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="profile" element={<Profile />} />
+        <Route path="manual" element={<UserManual />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 };

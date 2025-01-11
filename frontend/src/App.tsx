@@ -14,12 +14,15 @@ const theme = createTheme(
   {
     palette: {
       primary: {
-        main: '#1976d2',
+        main: '#4F46E5',
+      },
+      secondary: {
+        main: '#7C3AED',
       },
     },
   },
-  ptBR, // Tradução do Material-UI
-  dataGridPtBR // Tradução do DataGrid
+  ptBR,
+  dataGridPtBR
 );
 
 const App: React.FC = () => {

@@ -25,6 +25,11 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: true
       },
+      status: {
+        type: Sequelize.STRING,
+        allowNull: false,
+        defaultValue: 'pending'
+      },
       userId: {
         type: Sequelize.INTEGER,
         allowNull: false,

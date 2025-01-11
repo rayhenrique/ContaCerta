@@ -13,10 +13,6 @@ module.exports = {
         type: Sequelize.STRING,
         allowNull: false
       },
-      classification: {
-        type: Sequelize.STRING,
-        allowNull: true
-      },
       date: {
         type: Sequelize.DATE,
         allowNull: false
@@ -28,6 +24,11 @@ module.exports = {
       observation: {
         type: Sequelize.TEXT,
         allowNull: true
+      },
+      type: {
+        type: Sequelize.STRING,
+        allowNull: false,
+        defaultValue: 'variable'
       },
       userId: {
         type: Sequelize.INTEGER,

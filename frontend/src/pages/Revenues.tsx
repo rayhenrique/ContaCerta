@@ -16,6 +16,9 @@ import {
   IconButton,
   Alert,
   Grid,
+  Chip,
+  InputAdornment,
+  SelectChangeEvent,
 } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import {
@@ -42,6 +45,7 @@ interface Revenue {
   categoryId: number;
   date: string;
   userId: number;
+  status: 'pending' | 'confirmed' | 'cancelled';
   category?: {
     id: number;
     name: string;
@@ -63,6 +67,7 @@ const Revenues: React.FC = () => {
     categoryId: null as number | null,
     date: new Date().toISOString().split('T')[0],
     observation: '',
+    status: 'pending' as 'pending' | 'confirmed' | 'cancelled',
   });
 
   // Estados para as categorias
@@ -145,6 +150,7 @@ const Revenues: React.FC = () => {
       categoryId: null,
       date: new Date().toISOString().split('T')[0],
       observation: '',
+      status: 'pending',
     });
     setSelectedSource(null);
     setSelectedBlock(null);
@@ -156,7 +162,17 @@ const Revenues: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const numericValue = parseFloat(formData.value.replace(/[^\d,]/g, '').replace(',', '.'));
+      const numericValue = parseFloat(
+        formData.value
+          .replace('R$ ', '')
+          .replace(/\./g, '')
+          .replace(',', '.')
+      );
+
+      if (isNaN(numericValue)) {
+        setError('Valor inválido');
+        return;
+      }
       
       if (!selectedAction) {
         setError('Selecione uma categoria (ação)');
@@ -186,13 +202,20 @@ const Revenues: React.FC = () => {
 
   const handleEdit = (revenue: Revenue) => {
     setSelectedRevenue(revenue);
+    const formattedValue = new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(revenue.value);
+
     setFormData({
       description: revenue.description,
-      value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-        .format(revenue.value),
+      value: formattedValue,
       categoryId: revenue.categoryId,
       date: revenue.date.split('T')[0],
-      observation: revenue.observation,
+      observation: revenue.observation || '',
+      status: revenue.status,
     });
     
     // Encontrar e selecionar a hierarquia completa da categoria
@@ -231,6 +254,23 @@ const Revenues: React.FC = () => {
     }
   };
 
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent<string>
+  ) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleNumericChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      value: value,
+    }));
+  };
+
+  const handleSelectChange = (e: SelectChangeEvent<string>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
   const columns: GridColDef[] = [
     {
       field: 'description',
@@ -244,10 +284,14 @@ const Revenues: React.FC = () => {
       flex: 1,
       minWidth: 150,
       valueFormatter: (params) => {
+        const value = Number(params.value);
+        if (isNaN(value)) return 'R$ 0,00';
         return new Intl.NumberFormat('pt-BR', {
           style: 'currency',
           currency: 'BRL',
-        }).format(params.value);
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(value);
       },
     },
     {
@@ -281,6 +325,35 @@ const Revenues: React.FC = () => {
       valueFormatter: (params) => {
         return new Date(params.value).toLocaleDateString('pt-BR');
       },
+    },
+    {
+      field: 'status',
+      headerName: 'Status',
+      width: 130,
+      renderCell: (params) => {
+        const statusColors = {
+          pending: '#FFA726',    // Laranja
+          confirmed: '#66BB6A',  // Verde
+          cancelled: '#EF5350'   // Vermelho
+        };
+        const statusLabels = {
+          pending: 'Pendente',
+          confirmed: 'Confirmada',
+          cancelled: 'Cancelada'
+        };
+        return (
+          <Chip
+            label={statusLabels[params.value as keyof typeof statusLabels]}
+            sx={{
+              bgcolor: statusColors[params.value as keyof typeof statusColors],
+              color: 'white',
+              '& .MuiChip-label': {
+                fontWeight: 500
+              }
+            }}
+          />
+        );
+      }
     },
     {
       field: 'observation',
@@ -356,28 +429,24 @@ const Revenues: React.FC = () => {
         <form onSubmit={handleSubmit}>
           <DialogContent>
             <Grid container spacing={2}>
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <TextField
-                  label="Descrição"
                   fullWidth
+                  label="Descrição"
+                  name="description"
                   value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
+                  onChange={handleInputChange}
                   required
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <NumericFormat
                   customInput={TextField}
                   label="Valor"
                   fullWidth
                   value={formData.value}
-                  onValueChange={(values: NumberFormatValues) => {
-                    setFormData({
-                      ...formData,
-                      value: values.formattedValue,
-                    });
+                  onValueChange={(values) => {
+                    handleNumericChange(values.formattedValue);
                   }}
                   thousandSeparator="."
                   decimalSeparator=","
@@ -385,7 +454,36 @@ const Revenues: React.FC = () => {
                   decimalScale={2}
                   fixedDecimalScale
                   required
+                  allowNegative={false}
                 />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Data"
+                  name="date"
+                  type="date"
+                  value={formData.date}
+                  onChange={handleInputChange}
+                  required
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleSelectChange}
+                    label="Status"
+                    required
+                  >
+                    <MenuItem value="pending">Pendente</MenuItem>
+                    <MenuItem value="confirmed">Confirmada</MenuItem>
+                    <MenuItem value="cancelled">Cancelada</MenuItem>
+                  </Select>
+                </FormControl>
               </Grid>
               <Grid item xs={12}>
                 <FormControl fullWidth>
@@ -487,29 +585,13 @@ const Revenues: React.FC = () => {
               )}
               <Grid item xs={12}>
                 <TextField
-                  label="Data"
-                  type="date"
-                  fullWidth
-                  value={formData.date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date: e.target.value })
-                  }
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
                   label="Observação"
+                  name="observation"
                   fullWidth
                   multiline
                   rows={4}
                   value={formData.observation}
-                  onChange={(e) =>
-                    setFormData({ ...formData, observation: e.target.value })
-                  }
+                  onChange={handleInputChange}
                 />
               </Grid>
             </Grid>

@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@emotion/react": "^11.11.3",
-    "@emotion/styled": "^11.11.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "^5.15.3",
     "@mui/lab": "5.0.0-alpha.159",
     "@mui/material": "^5.15.3",
@@ -20,6 +20,7 @@
     "axios": "^1.6.3",
     "chart.js": "^4.4.1",
     "date-fns": "^2.30.0",
+    "framer-motion": "^11.17.0",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0",
