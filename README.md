@@ -323,7 +323,7 @@ fi
 
 ### Instalação Inicial
 
-O script de instalação é interativo e automatizado:
+O script de instalação é interativo e guiará você através do processo:
 
 ```bash
 # Fazer download do script
@@ -354,10 +354,10 @@ O script irá:
       - Ambiente (padrão: production)
 
    b) **Configuração do MySQL**:
-      - Senha root (gerada automaticamente)
+      - Senha root (você define durante a instalação)
       - Nome do banco de dados (padrão: contacerta)
       - Usuário do banco (padrão: root)
-      - Senha do usuário (gerada automaticamente se não for root)
+      - Senha do usuário (caso crie um usuário específico)
 
    c) **Configuração da Aplicação**:
       - Diretório de instalação (automático: /var/www/ContaCerta)
@@ -371,13 +371,12 @@ O script irá:
    - Inicia serviços
 
 5. **Salvar Informações**:
-   - Gera arquivo com todas as senhas e configurações
+   - Gera arquivo com configurações básicas
    - Salva em install_info.txt com permissões restritas
 
 ### Notas Importantes:
-- Todas as senhas são geradas automaticamente para maior segurança
-- O arquivo install_info.txt contém todas as informações importantes
-- Guarde as senhas em local seguro
+- Você define todas as senhas durante a instalação
+- O script confirma as senhas para evitar erros de digitação
 - Configure seu DNS para apontar para o servidor antes de instalar SSL
 
 ### Atualizações

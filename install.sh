@@ -21,16 +21,24 @@ get_input() {
 get_password() {
     local prompt=$1
     local password=""
+    local confirm_password=""
     
-    echo -ne "${YELLOW}$prompt ${NC}"
-    read -s password
-    echo
-    echo "$password"
-}
-
-# Função para gerar senha aleatória
-generate_password() {
-    openssl rand -base64 16
+    while true; do
+        echo -ne "${YELLOW}$prompt ${NC}"
+        read -s password
+        echo
+        
+        echo -ne "${YELLOW}Confirme a senha: ${NC}"
+        read -s confirm_password
+        echo
+        
+        if [ "$password" = "$confirm_password" ]; then
+            echo "$password"
+            break
+        else
+            echo -e "${RED}As senhas não coincidem. Tente novamente.${NC}\n"
+        fi
+    done
 }
 
 # Função para gerar JWT secret
@@ -75,14 +83,6 @@ echo -e "\n${YELLOW}Instalando PM2...${NC}"
 sudo npm install -g pm2
 pm2 --version
 
-# Gerar senhas aleatórias para MySQL
-MYSQL_ROOT_PASSWORD=$(generate_password)
-MYSQL_USER_PASSWORD=$(generate_password)
-
-# Configurar MySQL com senha root
-echo -e "\n${YELLOW}Configurando MySQL...${NC}"
-sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
-
 echo -e "\n${GREEN}Instalação básica concluída. Iniciando configuração...${NC}\n"
 
 # Solicitar configurações
@@ -94,17 +94,21 @@ NODE_ENV=$(get_input "Ambiente (production/development)" "production")
 
 echo -e "\n${GREEN}Configuração do MySQL${NC}"
 echo -e "------------------------"
-echo -e "${YELLOW}Senha root gerada automaticamente: $MYSQL_ROOT_PASSWORD${NC}"
-echo -e "${YELLOW}IMPORTANTE: Anote esta senha!${NC}"
+echo -e "${YELLOW}Digite a senha para o usuário root do MySQL${NC}"
+MYSQL_ROOT_PASSWORD=$(get_password "Senha do root: ")
+
+# Configurar MySQL com senha root
+echo -e "\n${YELLOW}Configurando MySQL...${NC}"
+sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
+
 MYSQL_DATABASE=$(get_input "Nome do banco de dados" "contacerta")
 MYSQL_USER=$(get_input "Usuário do banco de dados" "root")
 
 if [ "$MYSQL_USER" != "root" ]; then
-    echo -e "${YELLOW}Senha do usuário gerada automaticamente: $MYSQL_USER_PASSWORD${NC}"
-    echo -e "${YELLOW}IMPORTANTE: Anote esta senha!${NC}"
-    sudo mysql -u root -p$MYSQL_ROOT_PASSWORD -e "CREATE USER '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_USER_PASSWORD';"
+    echo -e "\n${YELLOW}Digite a senha para o usuário $MYSQL_USER${NC}"
+    MYSQL_PASSWORD=$(get_password "Senha do usuário: ")
+    sudo mysql -u root -p$MYSQL_ROOT_PASSWORD -e "CREATE USER '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';"
     sudo mysql -u root -p$MYSQL_ROOT_PASSWORD -e "GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'localhost';"
-    MYSQL_PASSWORD=$MYSQL_USER_PASSWORD
 else
     MYSQL_PASSWORD=$MYSQL_ROOT_PASSWORD
 fi
@@ -129,9 +133,6 @@ echo "Ambiente: $NODE_ENV"
 echo "Diretório: $APP_DIR"
 echo "Banco de Dados: $MYSQL_DATABASE"
 echo "Usuário BD: $MYSQL_USER"
-echo -e "\n${YELLOW}IMPORTANTE: Guarde estas senhas em local seguro:${NC}"
-echo "Senha Root MySQL: $MYSQL_ROOT_PASSWORD"
-[ "$MYSQL_USER" != "root" ] && echo "Senha Usuário MySQL: $MYSQL_USER_PASSWORD"
 
 echo -ne "\n${YELLOW}As configurações estão corretas? (S/n): ${NC}"
 read confirm
@@ -233,10 +234,6 @@ fi
 # Mostrar informações finais
 echo -e "\n${GREEN}=== Informações Importantes ===${NC}"
 echo -e "Guarde estas informações em local seguro:"
-echo -e "\n${YELLOW}Acessos MySQL:${NC}"
-echo "Root Password: $MYSQL_ROOT_PASSWORD"
-[ "$MYSQL_USER" != "root" ] && echo "User Password: $MYSQL_USER_PASSWORD"
-
 echo -e "\n${YELLOW}Diretórios:${NC}"
 echo "Aplicação: $APP_DIR"
 echo "Frontend: $APP_DIR/frontend"
@@ -262,13 +259,11 @@ Diretório: $APP_DIR
 MySQL:
 - Database: $MYSQL_DATABASE
 - Root User: root
-- Root Password: $MYSQL_ROOT_PASSWORD
 EOL
 
 if [ "$MYSQL_USER" != "root" ]; then
     cat >> $INSTALL_INFO << EOL
 - App User: $MYSQL_USER
-- App Password: $MYSQL_USER_PASSWORD
 EOL
 fi
 
