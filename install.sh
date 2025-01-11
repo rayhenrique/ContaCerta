@@ -14,26 +14,24 @@ fi
 
 # Função para gerar senha aleatória
 generate_password() {
-    openssl rand -base64 12
-}
-
-# Função para solicitar input do usuário
-get_input() {
-    local prompt=$1
-    local default=$2
-    local value=""
-    
-    echo -ne "${YELLOW}$prompt ${NC}[$default]: "
-    read value
-    echo "${value:-$default}"
+    openssl rand -base64 16
 }
 
 # Configurações iniciais
 echo -e "${GREEN}=== ContaCerta - Assistente de Instalação ===${NC}\n"
 
-# Solicitar configurações do usuário
-echo -e "${YELLOW}Digite o domínio ou IP do servidor onde a aplicação será acessada${NC}"
-DOMAIN=$(get_input "Domínio/IP" "localhost")
+# Solicitar apenas o domínio
+echo -e "${YELLOW}Digite o domínio onde a aplicação será acessada${NC}"
+echo -e "${YELLOW}(ou deixe em branco para usar o IP do servidor)${NC}"
+read -p "Domínio: " DOMAIN
+
+# Se nenhum domínio foi fornecido, usar o IP do servidor
+if [ -z "$DOMAIN" ]; then
+    DOMAIN=$(curl -s ifconfig.me)
+    echo -e "${YELLOW}Usando IP do servidor: $DOMAIN${NC}"
+fi
+
+# Gerar senhas e configurações automaticamente
 MYSQL_ROOT_PASSWORD=$(generate_password)
 MYSQL_USER="contacerta"
 MYSQL_PASSWORD=$(generate_password)
@@ -42,28 +40,13 @@ JWT_SECRET=$(openssl rand -base64 32)
 NODE_ENV="production"
 APP_DIR="/var/www/ContaCerta"
 
-# Mostrar resumo
-echo -e "\n${GREEN}Resumo da instalação:${NC}"
-echo -e "Domínio: $DOMAIN"
-echo -e "Diretório: $APP_DIR"
-echo -e "Banco de dados: $MYSQL_DATABASE"
-echo -e "Usuário BD: $MYSQL_USER"
-echo -e "\nAs senhas serão salvas em /root/.contacerta_credentials ao final da instalação"
-
-echo -ne "\n${YELLOW}Continuar com a instalação? (S/n): ${NC}"
-read confirm
-if [[ $confirm =~ ^[Nn] ]]; then
-    echo -e "${RED}Instalação cancelada pelo usuário${NC}"
-    exit 1
-fi
-
 # Atualizar sistema
 echo -e "\n${YELLOW}Atualizando sistema...${NC}"
 apt update && apt upgrade -y
 
 # Instalar dependências
 echo -e "\n${YELLOW}Instalando dependências...${NC}"
-apt install -y curl git nginx software-properties-common
+apt install -y curl git nginx software-properties-common dnsutils
 
 # Instalar Node.js
 echo -e "\n${YELLOW}Instalando Node.js...${NC}"
@@ -83,13 +66,9 @@ mkdir -p /var/run/mysqld
 chown mysql:mysql /var/run/mysqld
 chmod 755 /var/run/mysqld
 
-# Parar MySQL se estiver rodando
-systemctl stop mysql
-
 # Configuração otimizada do MySQL
 cat > /etc/mysql/mysql.conf.d/mysqld.cnf << EOL
 [mysqld]
-# Configurações básicas
 user            = mysql
 pid-file        = /var/run/mysqld/mysqld.pid
 socket          = /var/run/mysqld/mysqld.sock
@@ -110,30 +89,16 @@ max_heap_table_size = 32M
 thread_cache_size = 8
 EOL
 
-# Iniciar MySQL e aguardar
-systemctl start mysql
+# Reiniciar MySQL
+systemctl restart mysql
+systemctl enable mysql
+
+# Aguardar MySQL iniciar
 echo -e "${YELLOW}Aguardando MySQL iniciar...${NC}"
 sleep 10
 
-# Verificar status do MySQL
-if ! systemctl is-active --quiet mysql; then
-    echo -e "${RED}Erro: MySQL não está rodando. Verificando logs...${NC}"
-    journalctl -xe --unit mysql.service
-    exit 1
-fi
-
 # Configurar banco de dados
 echo -e "\n${YELLOW}Configurando banco de dados...${NC}"
-if ! mysql -e "SELECT 1"; then
-    echo -e "${RED}Erro: Não foi possível conectar ao MySQL. Tentando reiniciar...${NC}"
-    systemctl restart mysql
-    sleep 5
-    if ! mysql -e "SELECT 1"; then
-        echo -e "${RED}Erro crítico: MySQL não está respondendo${NC}"
-        exit 1
-    fi
-fi
-
 mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
 mysql -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;"
 mysql -e "CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';"
@@ -156,7 +121,7 @@ npm install
 # Criar arquivo .env do backend
 cat > .env << EOL
 NODE_ENV=$NODE_ENV
-DB_HOST=localhost
+DB_HOST=127.0.0.1
 DB_USER=$MYSQL_USER
 DB_PASS=$MYSQL_PASSWORD
 DB_NAME=$MYSQL_DATABASE
@@ -225,21 +190,6 @@ pm2 start src/server.js --name contacerta-api
 pm2 save
 pm2 startup | bash
 
-# Salvar credenciais
-echo -e "\n${YELLOW}Salvando credenciais...${NC}"
-cat > /root/.contacerta_credentials << EOL
-=== ContaCerta - Credenciais ===
-Data da instalação: $(date)
-
-MySQL Root Password: $MYSQL_ROOT_PASSWORD
-MySQL User: $MYSQL_USER
-MySQL Password: $MYSQL_PASSWORD
-Database: $MYSQL_DATABASE
-JWT Secret: $JWT_SECRET
-EOL
-
-chmod 600 /root/.contacerta_credentials
-
 # Configurar firewall
 echo -e "\n${YELLOW}Configurando firewall...${NC}"
 ufw allow 22
@@ -248,15 +198,10 @@ ufw allow 443
 ufw --force enable
 
 # Instalar e configurar SSL
-echo -e "\n${YELLOW}Instalando Certbot...${NC}"
-apt install -y certbot python3-certbot-nginx
-
-# Verificar se um domínio válido foi fornecido (não é IP)
-if [[ $DOMAIN =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo -e "${YELLOW}IP detectado ($DOMAIN). Pulando configuração SSL...${NC}"
-else
-    echo -e "${YELLOW}Configurando SSL para $DOMAIN...${NC}"
-    # Verificar se o domínio está apontando para este servidor
+if [[ ! $DOMAIN =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo -e "\n${YELLOW}Instalando Certbot...${NC}"
+    apt install -y certbot python3-certbot-nginx
+    
     SERVER_IP=$(curl -s ifconfig.me)
     DOMAIN_IP=$(dig +short $DOMAIN)
     
@@ -270,12 +215,27 @@ else
     fi
 fi
 
+# Salvar credenciais
+echo -e "\n${YELLOW}Salvando credenciais...${NC}"
+cat > /root/.contacerta_credentials << EOL
+=== ContaCerta - Credenciais ===
+Data da instalação: $(date)
+
+Domínio: $DOMAIN
+MySQL Root Password: $MYSQL_ROOT_PASSWORD
+MySQL User: $MYSQL_USER
+MySQL Password: $MYSQL_PASSWORD
+Database: $MYSQL_DATABASE
+JWT Secret: $JWT_SECRET
+EOL
+
+chmod 600 /root/.contacerta_credentials
+
 echo -e "\n${GREEN}Instalação concluída com sucesso!${NC}"
 echo -e "\n${YELLOW}Informações importantes:${NC}"
 echo "1. As credenciais foram salvas em /root/.contacerta_credentials"
 echo "2. Acesse a aplicação em: http://$DOMAIN"
-echo "3. Para instalar SSL, execute: certbot --nginx -d $DOMAIN"
-echo "4. Para ver os logs: pm2 logs contacerta-api"
+echo "3. Para ver os logs: pm2 logs contacerta-api"
 
 # Mostrar status dos serviços
 echo -e "\n${YELLOW}Status dos serviços:${NC}"
