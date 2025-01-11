@@ -357,6 +357,9 @@ Após confirmar as configurações, o script irá:
 - Iniciar todos os serviços
 
 ### Atualizações
+
+O script de atualização é interativo e oferece várias opções:
+
 ```bash
 # Fazer download do script
 wget https://raw.githubusercontent.com/rayhenrique/ContaCerta/main/update.sh
@@ -366,12 +369,29 @@ chmod +x update.sh
 ./update.sh
 ```
 
-3. **Restaurar de Backup**:
+O script oferece três opções:
+
+1. **Atualizar o sistema**: Realiza backup automático e atualiza o sistema
+2. **Apenas criar backup**: Cria backup do código e banco de dados
+3. **Cancelar**: Sai do script sem fazer alterações
+
+Para restaurar um backup específico:
 ```bash
-# Os backups ficam em /var/www/backups
-# Para restaurar manualmente:
-./update.sh restore /var/www/backups/contacerta_code_YYYYMMDD_HHMMSS.tar.gz /var/www/backups/contacerta_db_YYYYMMDD_HHMMSS.sql
+./update.sh restore backup_code.tar.gz backup_db.sql
 ```
+
+O script solicitará as seguintes informações:
+
+1. **Configuração do Ambiente**:
+   - Diretório da aplicação
+   - Diretório para backups
+
+2. **Configuração do MySQL**:
+   - Usuário do banco
+   - Senha do banco
+   - Nome do banco de dados
+
+Em caso de erro durante a atualização, o sistema será automaticamente restaurado para o último backup.
 
 ### Notas Importantes:
 - Sempre edite as variáveis nos scripts antes de executar

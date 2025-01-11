@@ -6,13 +6,27 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Configurações
-APP_DIR="/var/www/ContaCerta"
-BACKUP_DIR="/var/www/backups"
-MYSQL_USER="contacerta"
-MYSQL_PASSWORD="sua_senha_db"
-MYSQL_DATABASE="contacerta"
-DATE=$(date +%Y%m%d_%H%M%S)
+# Função para solicitar input do usuário
+get_input() {
+    local prompt=$1
+    local default=$2
+    local value=""
+    
+    echo -ne "${YELLOW}$prompt ${NC}[$default]: "
+    read value
+    echo "${value:-$default}"
+}
+
+# Função para solicitar senha
+get_password() {
+    local prompt=$1
+    local password=""
+    
+    echo -ne "${YELLOW}$prompt ${NC}"
+    read -s password
+    echo
+    echo "$password"
+}
 
 # Função para backup
 backup() {
@@ -52,6 +66,9 @@ restore() {
     echo -e "${GREEN}Restauração concluída!${NC}"
 }
 
+clear
+echo -e "${GREEN}=== ContaCerta - Assistente de Atualização ===${NC}\n"
+
 # Verificar se é uma restauração
 if [ "$1" = "restore" ]; then
     if [ -z "$2" ] || [ -z "$3" ]; then
@@ -59,48 +76,119 @@ if [ "$1" = "restore" ]; then
         echo "Uso: $0 restore backup_code.tar.gz backup_db.sql"
         exit 1
     fi
+    
+    # Solicitar configurações para restauração
+    echo -e "${GREEN}Configuração para Restauração${NC}"
+    echo -e "------------------------"
+    APP_DIR=$(get_input "Diretório da aplicação" "/var/www/ContaCerta")
+    MYSQL_USER=$(get_input "Usuário do banco de dados" "contacerta")
+    MYSQL_PASSWORD=$(get_password "Senha do banco de dados: ")
+    MYSQL_DATABASE=$(get_input "Nome do banco de dados" "contacerta")
+    
+    # Confirmar restauração
+    echo -e "\n${YELLOW}Você está prestes a restaurar:${NC}"
+    echo "Código: $2"
+    echo "Banco de dados: $3"
+    echo -ne "\nConfirma a restauração? (S/n): "
+    read confirm
+    if [[ $confirm =~ ^[Nn] ]]; then
+        echo -e "${RED}Restauração cancelada pelo usuário${NC}"
+        exit 1
+    fi
+    
     restore $2 $3
     exit 0
 fi
 
-# Criar backup antes de atualizar
-backup
+# Solicitar configurações para atualização
+echo -e "${GREEN}Configuração do Ambiente${NC}"
+echo -e "------------------------"
+APP_DIR=$(get_input "Diretório da aplicação" "/var/www/ContaCerta")
+BACKUP_DIR=$(get_input "Diretório para backups" "/var/www/backups")
 
-# Tentar atualizar
-echo -e "${YELLOW}Iniciando atualização...${NC}"
-cd $APP_DIR
+echo -e "\n${GREEN}Configuração do MySQL${NC}"
+echo -e "------------------------"
+MYSQL_USER=$(get_input "Usuário do banco de dados" "contacerta")
+MYSQL_PASSWORD=$(get_password "Senha do banco de dados: ")
+MYSQL_DATABASE=$(get_input "Nome do banco de dados" "contacerta")
 
-# Salvar hash atual para possível rollback
-CURRENT_HASH=$(git rev-parse HEAD)
+# Data para o backup
+DATE=$(date +%Y%m%d_%H%M%S)
 
-# Atualizar código
-if git pull origin main; then
-    # Atualizar backend
-    cd $APP_DIR/backend
-    npm install
-    
-    # Executar migrações
-    if npx sequelize-cli db:migrate; then
-        # Atualizar frontend
-        cd $APP_DIR/frontend
-        npm install
-        npm run build
+# Mostrar resumo
+echo -e "\n${GREEN}Resumo da Atualização:${NC}"
+echo -e "------------------------"
+echo "Diretório da Aplicação: $APP_DIR"
+echo "Diretório de Backups: $BACKUP_DIR"
+echo "Banco de Dados: $MYSQL_DATABASE"
+echo "Usuário BD: $MYSQL_USER"
 
-        # Reiniciar serviços
-        pm2 restart contacerta-backend
-        sudo systemctl reload nginx
+# Confirmar ação
+echo -e "\n${YELLOW}O que você deseja fazer?${NC}"
+echo "1. Atualizar o sistema (com backup automático)"
+echo "2. Apenas criar backup"
+echo "3. Cancelar"
+echo -ne "\nEscolha uma opção (1-3): "
+read option
 
-        echo -e "${GREEN}Atualização concluída com sucesso!${NC}"
-    else
-        echo -e "${RED}Erro nas migrações. Iniciando rollback...${NC}"
-        # Reverter migrações
-        npx sequelize-cli db:migrate:undo:all
-        
-        # Restaurar último backup
-        LAST_CODE_BACKUP=$(ls -t $BACKUP_DIR/contacerta_code_*.tar.gz | head -n1)
-        LAST_DB_BACKUP=$(ls -t $BACKUP_DIR/contacerta_db_*.sql | head -n1)
-        restore $LAST_CODE_BACKUP $LAST_DB_BACKUP
-    fi
-else
-    echo -e "${RED}Erro ao atualizar código. Mantendo versão atual.${NC}"
-fi
+case $option in
+    1)
+        # Criar backup antes de atualizar
+        backup
+
+        # Tentar atualizar
+        echo -e "\n${YELLOW}Iniciando atualização...${NC}"
+        cd $APP_DIR
+
+        # Salvar hash atual para possível rollback
+        CURRENT_HASH=$(git rev-parse HEAD)
+
+        # Atualizar código
+        if git pull origin main; then
+            # Atualizar backend
+            cd $APP_DIR/backend
+            npm install
+            
+            # Executar migrações
+            if npx sequelize-cli db:migrate; then
+                # Atualizar frontend
+                cd $APP_DIR/frontend
+                npm install
+                npm run build
+
+                # Reiniciar serviços
+                pm2 restart contacerta-backend
+                sudo systemctl reload nginx
+
+                echo -e "\n${GREEN}Atualização concluída com sucesso!${NC}"
+                echo -e "\n${YELLOW}Backups salvos em:${NC}"
+                echo "Código: $BACKUP_DIR/contacerta_code_$DATE.tar.gz"
+                echo "Banco de Dados: $BACKUP_DIR/contacerta_db_$DATE.sql"
+            else
+                echo -e "\n${RED}Erro nas migrações. Iniciando rollback...${NC}"
+                # Reverter migrações
+                npx sequelize-cli db:migrate:undo:all
+                
+                # Restaurar último backup
+                restore $BACKUP_DIR/contacerta_code_$DATE.tar.gz $BACKUP_DIR/contacerta_db_$DATE.sql
+            fi
+        else
+            echo -e "\n${RED}Erro ao atualizar código. Mantendo versão atual.${NC}"
+        fi
+        ;;
+    2)
+        backup
+        echo -e "\n${GREEN}Backup criado com sucesso!${NC}"
+        echo -e "${YELLOW}Arquivos salvos em:${NC}"
+        echo "Código: $BACKUP_DIR/contacerta_code_$DATE.tar.gz"
+        echo "Banco de Dados: $BACKUP_DIR/contacerta_db_$DATE.sql"
+        ;;
+    3)
+        echo -e "\n${YELLOW}Operação cancelada pelo usuário${NC}"
+        exit 0
+        ;;
+    *)
+        echo -e "\n${RED}Opção inválida${NC}"
+        exit 1
+        ;;
+esac
