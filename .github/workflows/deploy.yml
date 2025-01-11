@@ -1,0 +1,41 @@
+name: Deploy to Digital Ocean
+
+on:
+  push:
+    branches:
+      - main  # ou master, dependendo da sua branch principal
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy to Digital Ocean
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Se for primeira instalação
+            if [ ! -d "/var/www/ContaCerta" ]; then
+              # Download e executa o script de instalação
+              wget https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh
+              chmod +x install.sh
+              sudo ./install.sh
+            else
+              # Se já estiver instalado, apenas atualiza
+              cd /var/www/ContaCerta
+              git pull origin main
+              
+              # Atualiza o frontend
+              cd frontend
+              npm install
+              npm run build
+              
+              # Atualiza o backend
+              cd ../backend
+              npm install
+              pm2 restart contacerta-api
+            fi

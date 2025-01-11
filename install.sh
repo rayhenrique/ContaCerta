@@ -101,6 +101,23 @@ MYSQL_ROOT_PASSWORD=$(get_password "Senha do root: ")
 echo -e "\n${YELLOW}Configurando MySQL...${NC}"
 sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
 
+# Configurar MySQL para baixo consumo de memória
+echo -e "${YELLOW}Otimizando MySQL para baixo consumo de memória...${NC}"
+sudo tee /etc/mysql/mysql.conf.d/low-memory.cnf << EOL
+[mysqld]
+performance_schema = off
+key_buffer_size = 16M
+max_connections = 25
+innodb_buffer_pool_size = 64M
+innodb_log_buffer_size = 1M
+query_cache_size = 8M
+tmp_table_size = 8M
+max_heap_table_size = 8M
+EOL
+
+# Reiniciar MySQL para aplicar configurações
+sudo systemctl restart mysql
+
 MYSQL_DATABASE=$(get_input "Nome do banco de dados" "contacerta")
 MYSQL_USER=$(get_input "Usuário do banco de dados" "root")
 
@@ -139,6 +156,19 @@ read confirm
 if [[ $confirm =~ ^[Nn] ]]; then
     echo -e "${RED}Instalação cancelada pelo usuário${NC}"
     exit 1
+fi
+
+# Configurar SWAP
+echo -e "${YELLOW}Configurando SWAP...${NC}"
+if [ ! -f /swapfile ]; then
+    sudo fallocate -l 1G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+    echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+    echo 'vm.vfs_cache_pressure=50' | sudo tee -a /etc/sysctl.conf
+    sudo sysctl -p
 fi
 
 # Clonar repositório
@@ -251,12 +281,12 @@ fi
 # Parar instância anterior se existir
 pm2 delete contacerta-backend 2>/dev/null
 
-# Iniciar com PM2
-echo -e "\n${YELLOW}Iniciando servidor com PM2...${NC}"
-pm2 start src/server.js --name contacerta-backend
+# Configurar PM2 com limite de memória
+echo -e "${YELLOW}Configurando PM2 com limite de memória...${NC}"
+pm2 start npm --name "contacerta-api" -- start --max-memory-restart 150M
 
 # Verificar se o processo iniciou
-if ! pm2 show contacerta-backend > /dev/null 2>&1; then
+if ! pm2 show contacerta-api > /dev/null 2>&1; then
     echo -e "${RED}Erro ao iniciar o servidor com PM2${NC}"
     exit 1
 fi
