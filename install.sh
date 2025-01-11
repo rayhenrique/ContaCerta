@@ -28,35 +28,110 @@ get_password() {
     echo "$password"
 }
 
+# Função para gerar senha aleatória
+generate_password() {
+    openssl rand -base64 16
+}
+
+# Função para gerar JWT secret
+generate_jwt_secret() {
+    openssl rand -base64 32
+}
+
 clear
 echo -e "${GREEN}=== ContaCerta - Assistente de Instalação ===${NC}\n"
+
+# Atualizar sistema
+echo -e "${YELLOW}Atualizando sistema...${NC}"
+sudo apt update
+sudo apt upgrade -y
+
+# Instalar dependências básicas
+echo -e "\n${YELLOW}Instalando dependências básicas...${NC}"
+sudo apt install -y curl wget git software-properties-common
+
+# Instalar Node.js 18.x
+echo -e "\n${YELLOW}Instalando Node.js 18.x...${NC}"
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+node --version
+
+# Instalar MySQL 8.0
+echo -e "\n${YELLOW}Instalando MySQL 8.0...${NC}"
+sudo apt install -y mysql-server
+sudo systemctl start mysql
+sudo systemctl enable mysql
+mysql --version
+
+# Instalar Nginx
+echo -e "\n${YELLOW}Instalando Nginx...${NC}"
+sudo apt install -y nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
+nginx -v
+
+# Instalar PM2
+echo -e "\n${YELLOW}Instalando PM2...${NC}"
+sudo npm install -g pm2
+pm2 --version
+
+# Gerar senhas aleatórias para MySQL
+MYSQL_ROOT_PASSWORD=$(generate_password)
+MYSQL_USER_PASSWORD=$(generate_password)
+
+# Configurar MySQL com senha root
+echo -e "\n${YELLOW}Configurando MySQL...${NC}"
+sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
+
+echo -e "\n${GREEN}Instalação básica concluída. Iniciando configuração...${NC}\n"
 
 # Solicitar configurações
 echo -e "${GREEN}Configuração do Ambiente${NC}"
 echo -e "------------------------"
+echo -e "${YELLOW}Exemplo de domínio: meusite.com.br (sem http:// ou www)${NC}"
 DOMAIN=$(get_input "Digite o domínio do site" "localhost")
 NODE_ENV=$(get_input "Ambiente (production/development)" "production")
 
 echo -e "\n${GREEN}Configuração do MySQL${NC}"
 echo -e "------------------------"
-MYSQL_ROOT_PASSWORD=$(get_password "Digite a senha do root do MySQL: ")
+echo -e "${YELLOW}Senha root gerada automaticamente: $MYSQL_ROOT_PASSWORD${NC}"
+echo -e "${YELLOW}IMPORTANTE: Anote esta senha!${NC}"
 MYSQL_DATABASE=$(get_input "Nome do banco de dados" "contacerta")
-MYSQL_USER=$(get_input "Usuário do banco de dados" "contacerta")
-MYSQL_PASSWORD=$(get_password "Senha do usuário do banco de dados: ")
+MYSQL_USER=$(get_input "Usuário do banco de dados" "root")
+
+if [ "$MYSQL_USER" != "root" ]; then
+    echo -e "${YELLOW}Senha do usuário gerada automaticamente: $MYSQL_USER_PASSWORD${NC}"
+    echo -e "${YELLOW}IMPORTANTE: Anote esta senha!${NC}"
+    sudo mysql -u root -p$MYSQL_ROOT_PASSWORD -e "CREATE USER '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_USER_PASSWORD';"
+    sudo mysql -u root -p$MYSQL_ROOT_PASSWORD -e "GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'localhost';"
+    MYSQL_PASSWORD=$MYSQL_USER_PASSWORD
+else
+    MYSQL_PASSWORD=$MYSQL_ROOT_PASSWORD
+fi
+
+sudo mysql -u root -p$MYSQL_ROOT_PASSWORD -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;"
+sudo mysql -u root -p$MYSQL_ROOT_PASSWORD -e "FLUSH PRIVILEGES;"
 
 echo -e "\n${GREEN}Configuração da Aplicação${NC}"
 echo -e "------------------------"
-APP_DIR=$(get_input "Diretório de instalação" "/var/www/ContaCerta")
-JWT_SECRET=$(get_password "Chave secreta para JWT: ")
+APP_DIR="/var/www/ContaCerta"
+echo -e "${YELLOW}Diretório de instalação: $APP_DIR${NC}"
 
-# Confirmar configurações
-echo -e "\n${GREEN}Revise as configurações:${NC}"
+# Gerar JWT Secret
+JWT_SECRET=$(generate_jwt_secret)
+echo -e "${YELLOW}Chave JWT gerada automaticamente${NC}"
+
+# Mostrar resumo
+echo -e "\n${GREEN}Resumo da Instalação:${NC}"
 echo -e "------------------------"
-echo -e "Domínio: $DOMAIN"
-echo -e "Ambiente: $NODE_ENV"
-echo -e "Banco de Dados: $MYSQL_DATABASE"
-echo -e "Usuário BD: $MYSQL_USER"
-echo -e "Diretório: $APP_DIR"
+echo "Domínio: $DOMAIN"
+echo "Ambiente: $NODE_ENV"
+echo "Diretório: $APP_DIR"
+echo "Banco de Dados: $MYSQL_DATABASE"
+echo "Usuário BD: $MYSQL_USER"
+echo -e "\n${YELLOW}IMPORTANTE: Guarde estas senhas em local seguro:${NC}"
+echo "Senha Root MySQL: $MYSQL_ROOT_PASSWORD"
+[ "$MYSQL_USER" != "root" ] && echo "Senha Usuário MySQL: $MYSQL_USER_PASSWORD"
 
 echo -ne "\n${YELLOW}As configurações estão corretas? (S/n): ${NC}"
 read confirm
@@ -64,40 +139,6 @@ if [[ $confirm =~ ^[Nn] ]]; then
     echo -e "${RED}Instalação cancelada pelo usuário${NC}"
     exit 1
 fi
-
-echo -e "\n${GREEN}Iniciando instalação...${NC}"
-
-# Atualizar sistema
-echo -e "\n${YELLOW}Atualizando sistema...${NC}"
-sudo apt update
-sudo apt upgrade -y
-
-# Instalar dependências
-echo -e "\n${YELLOW}Instalando dependências...${NC}"
-sudo apt install -y curl git nginx software-properties-common
-
-# Instalar Node.js
-echo -e "\n${YELLOW}Instalando Node.js...${NC}"
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install -y nodejs
-
-# Instalar PM2
-echo -e "\n${YELLOW}Instalando PM2...${NC}"
-sudo npm install -g pm2
-
-# Instalar MySQL
-echo -e "\n${YELLOW}Instalando MySQL...${NC}"
-sudo apt install -y mysql-server
-sudo systemctl start mysql
-sudo systemctl enable mysql
-
-# Configurar MySQL
-echo -e "\n${YELLOW}Configurando MySQL...${NC}"
-sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
-sudo mysql -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;"
-sudo mysql -e "CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';"
-sudo mysql -e "GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'localhost';"
-sudo mysql -e "FLUSH PRIVILEGES;"
 
 # Clonar repositório
 echo -e "\n${YELLOW}Clonando repositório...${NC}"
@@ -145,14 +186,14 @@ server {
     listen 80;
     server_name $DOMAIN;
 
-    # Frontend
+    root $APP_DIR/frontend/build;
+    index index.html;
+
     location / {
-        root $APP_DIR/frontend/build;
         try_files \$uri \$uri/ /index.html;
         add_header Cache-Control "no-cache";
     }
 
-    # Backend API
     location /api {
         proxy_pass http://localhost:3001;
         proxy_http_version 1.1;
@@ -179,17 +220,64 @@ pm2 save
 pm2 startup
 
 echo -e "\n${GREEN}Instalação concluída com sucesso!${NC}"
-echo -e "\n${YELLOW}Próximos passos:${NC}"
-echo "1. Configure SSL com: sudo certbot --nginx -d $DOMAIN"
-echo "2. Verifique se a aplicação está rodando em: http://$DOMAIN"
-echo "3. Faça login com as credenciais padrão e altere a senha"
-echo "4. Configure o firewall se necessário"
 
 # Perguntar se deseja instalar SSL
-echo -ne "\n${YELLOW}Deseja instalar SSL agora? (S/n): ${NC}"
+echo -e "\n${YELLOW}Deseja instalar SSL (https://) agora? (S/n): ${NC}"
 read install_ssl
 if [[ ! $install_ssl =~ ^[Nn] ]]; then
     echo -e "\n${YELLOW}Instalando Certbot e configurando SSL...${NC}"
     sudo apt install -y certbot python3-certbot-nginx
     sudo certbot --nginx -d $DOMAIN
 fi
+
+# Mostrar informações finais
+echo -e "\n${GREEN}=== Informações Importantes ===${NC}"
+echo -e "Guarde estas informações em local seguro:"
+echo -e "\n${YELLOW}Acessos MySQL:${NC}"
+echo "Root Password: $MYSQL_ROOT_PASSWORD"
+[ "$MYSQL_USER" != "root" ] && echo "User Password: $MYSQL_USER_PASSWORD"
+
+echo -e "\n${YELLOW}Diretórios:${NC}"
+echo "Aplicação: $APP_DIR"
+echo "Frontend: $APP_DIR/frontend"
+echo "Backend: $APP_DIR/backend"
+
+echo -e "\n${YELLOW}Próximos passos:${NC}"
+echo "1. Configure seu domínio DNS para apontar para este servidor"
+echo "2. Acesse o sistema em: http://$DOMAIN"
+echo "3. Faça login com as credenciais padrão e altere a senha"
+echo "4. Configure o firewall se necessário"
+
+# Salvar informações em arquivo
+echo -e "\n${YELLOW}Salvando informações de instalação...${NC}"
+INSTALL_INFO="$APP_DIR/install_info.txt"
+cat > $INSTALL_INFO << EOL
+=== ContaCerta - Informações de Instalação ===
+Data: $(date)
+
+Ambiente: $NODE_ENV
+Domínio: $DOMAIN
+Diretório: $APP_DIR
+
+MySQL:
+- Database: $MYSQL_DATABASE
+- Root User: root
+- Root Password: $MYSQL_ROOT_PASSWORD
+EOL
+
+if [ "$MYSQL_USER" != "root" ]; then
+    cat >> $INSTALL_INFO << EOL
+- App User: $MYSQL_USER
+- App Password: $MYSQL_USER_PASSWORD
+EOL
+fi
+
+cat >> $INSTALL_INFO << EOL
+
+JWT Secret: $JWT_SECRET
+
+Mantenha este arquivo em local seguro!
+EOL
+
+chmod 600 $INSTALL_INFO
+echo -e "Informações salvas em: $INSTALL_INFO"

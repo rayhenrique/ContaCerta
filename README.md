@@ -323,7 +323,7 @@ fi
 
 ### Instalação Inicial
 
-O script de instalação é interativo e guiará você através do processo:
+O script de instalação é interativo e automatizado:
 
 ```bash
 # Fazer download do script
@@ -334,27 +334,51 @@ chmod +x install.sh
 ./install.sh
 ```
 
-O script solicitará as seguintes informações:
+O script irá:
 
-1. **Configuração do Ambiente**:
-   - Domínio do site
-   - Ambiente (production/development)
+1. **Atualizar o Sistema**:
+   - Atualiza pacotes do Ubuntu Server
+   - Instala dependências básicas
 
-2. **Configuração do MySQL**:
-   - Senha do root
-   - Nome do banco de dados
-   - Usuário do banco
-   - Senha do usuário
+2. **Instalar Componentes**:
+   - Node.js 18.x
+   - MySQL 8.0
+   - Nginx
+   - PM2
+   - Git
 
-3. **Configuração da Aplicação**:
-   - Diretório de instalação
-   - Chave secreta para JWT
+3. **Solicitar Configurações**:
 
-Após confirmar as configurações, o script irá:
-- Instalar todas as dependências
-- Configurar o ambiente
-- Instalar e configurar SSL (opcional)
-- Iniciar todos os serviços
+   a) **Configuração do Ambiente**:
+      - Domínio do site (exemplo: meusite.com.br)
+      - Ambiente (padrão: production)
+
+   b) **Configuração do MySQL**:
+      - Senha root (gerada automaticamente)
+      - Nome do banco de dados (padrão: contacerta)
+      - Usuário do banco (padrão: root)
+      - Senha do usuário (gerada automaticamente se não for root)
+
+   c) **Configuração da Aplicação**:
+      - Diretório de instalação (automático: /var/www/ContaCerta)
+      - Chave JWT (gerada automaticamente)
+
+4. **Configurar Ambiente**:
+   - Clona o repositório
+   - Configura backend e frontend
+   - Configura Nginx
+   - Instala SSL (opcional)
+   - Inicia serviços
+
+5. **Salvar Informações**:
+   - Gera arquivo com todas as senhas e configurações
+   - Salva em install_info.txt com permissões restritas
+
+### Notas Importantes:
+- Todas as senhas são geradas automaticamente para maior segurança
+- O arquivo install_info.txt contém todas as informações importantes
+- Guarde as senhas em local seguro
+- Configure seu DNS para apontar para o servidor antes de instalar SSL
 
 ### Atualizações
 
