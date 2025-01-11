@@ -74,110 +74,292 @@ npm start
 
 ## Instalação no Ubuntu Server (Digital Ocean)
 
-1. **Atualizar o Sistema**
+### Script de Instalação Automática
+
+Crie um arquivo chamado `install.sh`:
+
 ```bash
+#!/bin/bash
+
+# Cores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# Configurações
+APP_DIR="/var/www/ContaCerta"
+DOMAIN="seu_dominio.com"
+MYSQL_ROOT_PASSWORD="sua_senha_root"
+MYSQL_USER="contacerta"
+MYSQL_PASSWORD="sua_senha_db"
+MYSQL_DATABASE="contacerta"
+JWT_SECRET="seu_jwt_secret"
+NODE_ENV="production"
+
+echo -e "${GREEN}Iniciando instalação do ContaCerta...${NC}"
+
+# Atualizar sistema
+echo -e "${YELLOW}Atualizando sistema...${NC}"
 sudo apt update
 sudo apt upgrade -y
-```
 
-2. **Instalar Node.js**
-```bash
+# Instalar dependências
+echo -e "${YELLOW}Instalando dependências...${NC}"
+sudo apt install -y curl git nginx software-properties-common
+
+# Instalar Node.js
+echo -e "${YELLOW}Instalando Node.js...${NC}"
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
-```
 
-3. **Instalar MySQL**
-```bash
-sudo apt install mysql-server -y
-sudo mysql_secure_installation
-
-# Criar banco e usuário
-sudo mysql
-CREATE DATABASE contacerta;
-CREATE USER 'contacerta'@'localhost' IDENTIFIED BY 'sua_senha';
-GRANT ALL PRIVILEGES ON contacerta.* TO 'contacerta'@'localhost';
-FLUSH PRIVILEGES;
-exit;
-```
-
-4. **Instalar Nginx**
-```bash
-sudo apt install nginx -y
-sudo systemctl enable nginx
-```
-
-5. **Instalar PM2**
-```bash
+# Instalar PM2
+echo -e "${YELLOW}Instalando PM2...${NC}"
 sudo npm install -g pm2
-```
 
-6. **Clonar e Configurar o Projeto**
-```bash
-cd /var/www
-sudo git clone https://github.com/rayhenrique/ContaCerta.git
-cd ContaCerta
+# Instalar MySQL
+echo -e "${YELLOW}Instalando MySQL...${NC}"
+sudo apt install -y mysql-server
+sudo systemctl start mysql
+sudo systemctl enable mysql
 
-# Configurar Backend
-cd backend
-sudo npm install
-sudo cp .env.example .env
-sudo nano .env  # Configure as variáveis de ambiente
+# Configurar MySQL
+echo -e "${YELLOW}Configurando MySQL...${NC}"
+sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
+sudo mysql -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;"
+sudo mysql -e "CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';"
+sudo mysql -e "GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'localhost';"
+sudo mysql -e "FLUSH PRIVILEGES;"
 
-# Configurar Frontend
-cd ../frontend
-sudo npm install
-sudo cp .env.example .env
-sudo nano .env  # Configure a URL da API
+# Clonar repositório
+echo -e "${YELLOW}Clonando repositório...${NC}"
+sudo mkdir -p $APP_DIR
+sudo chown -R $USER:$USER $APP_DIR
+git clone https://github.com/rayhenrique/ContaCerta.git $APP_DIR
+
+# Configurar backend
+echo -e "${YELLOW}Configurando backend...${NC}"
+cd $APP_DIR/backend
+npm install
+
+# Criar arquivo .env
+cat > .env << EOL
+NODE_ENV=$NODE_ENV
+DB_HOST=localhost
+DB_USER=$MYSQL_USER
+DB_PASS=$MYSQL_PASSWORD
+DB_NAME=$MYSQL_DATABASE
+JWT_SECRET=$JWT_SECRET
+PORT=3001
+EOL
+
+# Executar migrações
+echo -e "${YELLOW}Executando migrações do banco de dados...${NC}"
+npx sequelize-cli db:migrate
+
+# Configurar frontend
+echo -e "${YELLOW}Configurando frontend...${NC}"
+cd $APP_DIR/frontend
+npm install
+
+# Criar arquivo .env
+cat > .env << EOL
+REACT_APP_API_URL=http://$DOMAIN/api
+EOL
+
+# Build do frontend
 npm run build
-```
 
-7. **Configurar Nginx**
-```bash
-sudo nano /etc/nginx/sites-available/contacerta
-
-# Adicione a configuração:
+# Configurar Nginx
+echo -e "${YELLOW}Configurando Nginx...${NC}"
+sudo tee /etc/nginx/sites-available/contacerta << EOL
 server {
     listen 80;
-    server_name seu_dominio.com;
+    server_name $DOMAIN;
 
     # Frontend
     location / {
-        root /var/www/ContaCerta/frontend/build;
-        try_files $uri $uri/ /index.html;
+        root $APP_DIR/frontend/build;
+        try_files \$uri \$uri/ /index.html;
+        add_header Cache-Control "no-cache";
     }
 
     # Backend API
     location /api {
         proxy_pass http://localhost:3001;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 }
+EOL
 
-# Ativar o site
-sudo ln -s /etc/nginx/sites-available/contacerta /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
-```
+# Ativar site e reiniciar Nginx
+sudo ln -sf /etc/nginx/sites-available/contacerta /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl restart nginx
 
-8. **Iniciar a Aplicação com PM2**
-```bash
-cd /var/www/ContaCerta/backend
+# Iniciar aplicação com PM2
+echo -e "${YELLOW}Iniciando aplicação...${NC}"
+cd $APP_DIR/backend
 pm2 start src/server.js --name contacerta-backend
-
-# Salvar configuração do PM2
 pm2 save
 pm2 startup
+
+echo -e "${GREEN}Instalação concluída!${NC}"
+echo -e "${YELLOW}Não esqueça de:${NC}"
+echo "1. Configurar SSL com Certbot"
+echo "2. Ajustar as senhas em produção"
+echo "3. Verificar as configurações de firewall"
 ```
 
-9. **Configurar SSL (Opcional mas Recomendado)**
+### Script de Atualização com Backup
+
+Crie um arquivo chamado `update.sh`:
+
 ```bash
-sudo apt install certbot python3-certbot-nginx -y
-sudo certbot --nginx -d seu_dominio.com
+#!/bin/bash
+
+# Cores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# Configurações
+APP_DIR="/var/www/ContaCerta"
+BACKUP_DIR="/var/www/backups"
+MYSQL_USER="contacerta"
+MYSQL_PASSWORD="sua_senha_db"
+MYSQL_DATABASE="contacerta"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+# Função para backup
+backup() {
+    echo -e "${YELLOW}Criando backup...${NC}"
+    
+    # Criar diretório de backup se não existir
+    mkdir -p $BACKUP_DIR
+
+    # Backup do código
+    tar -czf $BACKUP_DIR/contacerta_code_$DATE.tar.gz $APP_DIR
+
+    # Backup do banco de dados
+    mysqldump -u $MYSQL_USER -p$MYSQL_PASSWORD $MYSQL_DATABASE > $BACKUP_DIR/contacerta_db_$DATE.sql
+
+    echo -e "${GREEN}Backup criado em $BACKUP_DIR${NC}"
+}
+
+# Função para restaurar
+restore() {
+    local BACKUP_CODE=$1
+    local BACKUP_DB=$2
+
+    echo -e "${YELLOW}Restaurando backup...${NC}"
+
+    # Restaurar código
+    cd $APP_DIR
+    tar -xzf $BACKUP_CODE -C /
+
+    # Restaurar banco de dados
+    mysql -u $MYSQL_USER -p$MYSQL_PASSWORD $MYSQL_DATABASE < $BACKUP_DB
+
+    # Reconstruir e reiniciar
+    cd $APP_DIR/frontend && npm install && npm run build
+    cd $APP_DIR/backend && npm install
+    pm2 restart contacerta-backend
+
+    echo -e "${GREEN}Restauração concluída!${NC}"
+}
+
+# Criar backup antes de atualizar
+backup
+
+# Tentar atualizar
+echo -e "${YELLOW}Iniciando atualização...${NC}"
+cd $APP_DIR
+
+# Salvar hash atual para possível rollback
+CURRENT_HASH=$(git rev-parse HEAD)
+
+# Atualizar código
+if git pull origin main; then
+    # Atualizar backend
+    cd $APP_DIR/backend
+    npm install
+    
+    # Executar migrações
+    if npx sequelize-cli db:migrate; then
+        # Atualizar frontend
+        cd $APP_DIR/frontend
+        npm install
+        npm run build
+
+        # Reiniciar serviços
+        pm2 restart contacerta-backend
+        sudo systemctl reload nginx
+
+        echo -e "${GREEN}Atualização concluída com sucesso!${NC}"
+    else
+        echo -e "${RED}Erro nas migrações. Iniciando rollback...${NC}"
+        # Reverter migrações
+        npx sequelize-cli db:migrate:undo:all
+        
+        # Restaurar último backup
+        LAST_CODE_BACKUP=$(ls -t $BACKUP_DIR/contacerta_code_*.tar.gz | head -n1)
+        LAST_DB_BACKUP=$(ls -t $BACKUP_DIR/contacerta_db_*.sql | head -n1)
+        restore $LAST_CODE_BACKUP $LAST_DB_BACKUP
+    fi
+else
+    echo -e "${RED}Erro ao atualizar código. Mantendo versão atual.${NC}"
+fi
 ```
+
+### Uso dos Scripts
+
+1. **Instalação Inicial**:
+```bash
+# Fazer download do script
+wget https://raw.githubusercontent.com/rayhenrique/ContaCerta/main/install.sh
+chmod +x install.sh
+
+# Editar variáveis (importante!)
+nano install.sh
+
+# Executar instalação
+./install.sh
+```
+
+2. **Atualizações**:
+```bash
+# Fazer download do script
+wget https://raw.githubusercontent.com/rayhenrique/ContaCerta/main/update.sh
+chmod +x update.sh
+
+# Editar variáveis (importante!)
+nano update.sh
+
+# Executar atualização
+./update.sh
+```
+
+3. **Restaurar de Backup**:
+```bash
+# Os backups ficam em /var/www/backups
+# Para restaurar manualmente:
+./update.sh restore /var/www/backups/contacerta_code_YYYYMMDD_HHMMSS.tar.gz /var/www/backups/contacerta_db_YYYYMMDD_HHMMSS.sql
+```
+
+### Notas Importantes:
+- Sempre edite as variáveis nos scripts antes de executar
+- Mantenha os backups em local seguro
+- Configure SSL após a instalação usando Certbot
+- Ajuste as permissões de arquivos se necessário
+- Monitore os logs após atualizações
 
 ## Funcionalidades Principais
 
