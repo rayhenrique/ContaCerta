@@ -10,9 +10,9 @@ module.exports = {
       name: 'Ray Henrique',
       email: 'rayhenrique@gmail.com',
       password: hashedPassword,
-      accessLevel: 'admin',
-      createdAt: new Date(),
-      updatedAt: new Date()
+      access_level: 'admin',
+      created_at: new Date(),
+      updated_at: new Date()
     }], {});
   },
 

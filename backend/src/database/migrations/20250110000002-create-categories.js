@@ -17,7 +17,7 @@ module.exports = {
         type: Sequelize.ENUM('source', 'block', 'group', 'action'),
         allowNull: false
       },
-      parentId: {
+      parent_id: {
         type: Sequelize.INTEGER,
         allowNull: true,
         references: {
@@ -27,15 +27,15 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      expenseClassification: {
+      expense_classification: {
         type: Sequelize.STRING,
         allowNull: true
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE
       }

@@ -28,6 +28,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { canManageDespesa } from '../utils/permissions';
 import api from '../services/api';
+import { NumericFormat } from 'react-number-format';
 
 interface Category {
   id: number;
@@ -439,16 +440,21 @@ const Expenses: React.FC = () => {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
+                <NumericFormat
+                  customInput={TextField}
                   label="Valor"
-                  name="value"
+                  fullWidth
                   value={formData.value}
-                  onChange={handleInputChange}
-                  required
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                  onValueChange={(values) => {
+                    handleNumericChange(values.formattedValue);
                   }}
+                  thousandSeparator="."
+                  decimalSeparator=","
+                  prefix="R$ "
+                  decimalScale={2}
+                  fixedDecimalScale
+                  required
+                  allowNegative={false}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>

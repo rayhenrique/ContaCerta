@@ -31,11 +31,13 @@ module.exports = (sequelize) => {
         type: DataTypes.ENUM('admin', 'operator'),
         allowNull: false,
         defaultValue: 'operator',
+        field: 'access_level'
       },
     },
     {
       sequelize,
       modelName: 'User',
+      underscored: true,
       hooks: {
         beforeCreate: async (user) => {
           user.password = await bcrypt.hash(user.password, 10);

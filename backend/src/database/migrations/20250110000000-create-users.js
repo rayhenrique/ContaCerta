@@ -22,16 +22,16 @@ module.exports = {
         type: Sequelize.STRING,
         allowNull: false
       },
-      accessLevel: {
+      access_level: {
         type: Sequelize.ENUM('admin', 'operator'),
         allowNull: false,
         defaultValue: 'operator'
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE
       }

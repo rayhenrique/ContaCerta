@@ -4,21 +4,18 @@ const bcrypt = require('bcryptjs');
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.bulkInsert('Users', [
-      {
-        name: 'Administrador',
-        email: 'rayhenrique@gmail.com',
-        password: await bcrypt.hash('1508rcrc.', 10),
-        role: 'admin',
-        created_at: new Date(),
-        updated_at: new Date()
-      }
-    ], {});
+    const hashedPassword = await bcrypt.hash('1508rcrc', 10);
+    await queryInterface.bulkInsert('Users', [{
+      name: 'Ray Henrique',
+      email: 'rayhenrique@gmail.com',
+      password: hashedPassword,
+      access_level: 'admin',
+      created_at: new Date(),
+      updated_at: new Date()
+    }], {});
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.bulkDelete('Users', {
-      email: 'rayhenrique@gmail.com'
-    }, {});
+    await queryInterface.bulkDelete('Users', { email: 'rayhenrique@gmail.com' }, {});
   }
 };

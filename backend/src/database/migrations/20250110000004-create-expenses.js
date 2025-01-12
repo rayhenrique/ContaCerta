@@ -30,7 +30,12 @@ module.exports = {
         allowNull: false,
         defaultValue: 'variable'
       },
-      userId: {
+      status: {
+        type: Sequelize.STRING,
+        allowNull: false,
+        defaultValue: 'pending'
+      },
+      user_id: {
         type: Sequelize.INTEGER,
         allowNull: false,
         references: {
@@ -40,7 +45,7 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      categoryId: {
+      category_id: {
         type: Sequelize.INTEGER,
         allowNull: false,
         references: {
@@ -50,11 +55,11 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'RESTRICT'
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE
       }
