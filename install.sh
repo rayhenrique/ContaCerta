@@ -1,27 +1,13 @@
 #!/bin/bash
 
 # Cores para output
-RED='\033[0;31m'
 GREEN='\033[0;32m'
+RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Verificar se está rodando como root
-if [ "$EUID" -ne 0 ]; then 
-    echo -e "${RED}Por favor, execute o script como root (sudo ./install.sh)${NC}"
-    exit 1
-fi
-
-# Função para gerar senha aleatória
-generate_password() {
-    openssl rand -base64 16
-}
-
-# Configurações iniciais
-echo -e "${GREEN}=== ContaCerta - Assistente de Instalação ===${NC}\n"
-
-# Solicitar apenas o domínio
-echo -e "${YELLOW}Digite o domínio onde a aplicação será acessada${NC}"
+# Solicitar domínio ou usar IP
+echo -e "${YELLOW}Digite o domínio onde a aplicação será instalada${NC}"
 echo -e "${YELLOW}(ou deixe em branco para usar o IP do servidor)${NC}"
 read -p "Domínio: " DOMAIN
 
@@ -31,136 +17,124 @@ if [ -z "$DOMAIN" ]; then
     echo -e "${YELLOW}Usando IP do servidor: $DOMAIN${NC}"
 fi
 
-# Gerar senhas e configurações automaticamente
-MYSQL_ROOT_PASSWORD=$(generate_password)
-MYSQL_USER="contacerta"
-MYSQL_PASSWORD=$(generate_password)
-MYSQL_DATABASE="contacerta"
-JWT_SECRET=$(openssl rand -base64 32)
-NODE_ENV="production"
-APP_DIR="/var/www/ContaCerta"
+echo -e "${GREEN}=== Iniciando instalação do ContaCerta ===${NC}"
 
-# Atualizar sistema
-echo -e "\n${YELLOW}Atualizando sistema...${NC}"
-apt update && apt upgrade -y
+# Função para verificar erros
+check_error() {
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Erro: $1${NC}"
+        exit 1
+    fi
+}
 
-# Instalar dependências
-echo -e "\n${YELLOW}Instalando dependências...${NC}"
-apt install -y curl git nginx software-properties-common dnsutils
+# Função para exibir progresso
+show_progress() {
+    echo -e "${YELLOW}>>> $1...${NC}"
+}
 
-# Instalar Node.js
-echo -e "\n${YELLOW}Instalando Node.js...${NC}"
-curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-apt install -y nodejs
+# 1. Atualização inicial do sistema
+show_progress "Atualizando sistema"
+sudo apt update && sudo apt upgrade -y
+check_error "Falha na atualização do sistema"
 
-# Instalar PM2
-echo -e "\n${YELLOW}Instalando PM2...${NC}"
-npm install -g pm2
+# 2. Instalação de dependências básicas
+show_progress "Instalando dependências básicas"
+sudo apt install -y curl git build-essential nginx mysql-server
+check_error "Falha na instalação das dependências"
 
-# Configurar MySQL
-echo -e "\n${YELLOW}Instalando e configurando MySQL...${NC}"
-apt install -y mysql-server
+# 3. Configuração do timezone
+show_progress "Configurando timezone"
+sudo timedatectl set-timezone America/Sao_Paulo
+check_error "Falha na configuração do timezone"
 
-# Garantir que o diretório do MySQL existe
-mkdir -p /var/run/mysqld
-chown mysql:mysql /var/run/mysqld
-chmod 755 /var/run/mysqld
+# 4. Instalação do Node.js
+show_progress "Instalando Node.js"
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+check_error "Falha na instalação do Node.js"
 
-# Configuração otimizada do MySQL
-cat > /etc/mysql/mysql.conf.d/mysqld.cnf << EOL
-[mysqld]
-user            = mysql
-pid-file        = /var/run/mysqld/mysqld.pid
-socket          = /var/run/mysqld/mysqld.sock
-port            = 3306
-basedir         = /usr
-datadir         = /var/lib/mysql
-tmpdir          = /tmp
-bind-address    = 127.0.0.1
+# 5. Configuração do MySQL
+show_progress "Configurando MySQL"
+sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '1508rcrc';"
+sudo mysql -e "FLUSH PRIVILEGES;"
+sudo mysql -e "CREATE DATABASE IF NOT EXISTS contacerta;"
+check_error "Falha na configuração do MySQL"
 
-# Otimizações para 1GB RAM
-key_buffer_size = 128M
-max_connections = 75
-innodb_buffer_pool_size = 256M
-innodb_log_buffer_size = 8M
-query_cache_size = 32M
-tmp_table_size = 32M
-max_heap_table_size = 32M
-thread_cache_size = 8
-EOL
+# 6. Configuração do diretório da aplicação
+show_progress "Configurando diretório da aplicação"
+sudo mkdir -p /var/www/contacerta
+cd /var/www/contacerta
+sudo git clone https://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@github.com/rayhenrique/ContaCerta.git .
+check_error "Falha no clone do repositório"
 
-# Reiniciar MySQL
-systemctl restart mysql
-systemctl enable mysql
+# 7. Configuração de permissões
+show_progress "Configurando permissões"
+sudo chown -R $USER:$USER /var/www/contacerta
+check_error "Falha na configuração de permissões"
 
-# Aguardar MySQL iniciar
-echo -e "${YELLOW}Aguardando MySQL iniciar...${NC}"
-sleep 10
-
-# Configurar banco de dados
-echo -e "\n${YELLOW}Configurando banco de dados...${NC}"
-mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD';"
-mysql -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;"
-mysql -e "CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';"
-mysql -e "GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'localhost';"
-mysql -e "FLUSH PRIVILEGES;"
-
-# Clonar repositório
-echo -e "\n${YELLOW}Clonando repositório...${NC}"
-mkdir -p $APP_DIR
-cd /var/www
-GITHUB_TOKEN="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"
-git clone https://${GITHUB_TOKEN}@github.com/rayhenrique/ContaCerta.git
-chown -R www-data:www-data $APP_DIR
-
-# Configurar backend
-echo -e "\n${YELLOW}Configurando backend...${NC}"
-cd $APP_DIR/backend
+# 8. Configuração do Backend
+show_progress "Configurando Backend"
+cd /var/www/contacerta/backend
 npm install
+check_error "Falha na instalação das dependências do backend"
 
-# Criar arquivo .env do backend
-cat > .env << EOL
-NODE_ENV=$NODE_ENV
-DB_HOST=127.0.0.1
-DB_USER=$MYSQL_USER
-DB_PASS=$MYSQL_PASSWORD
-DB_NAME=$MYSQL_DATABASE
-JWT_SECRET=$JWT_SECRET
+# Criar arquivo .env
+cat > .env << EOF
+DB_HOST=localhost
+DB_USER=root
+DB_PASS=1508rcrc
+DB_NAME=contacerta
+JWT_SECRET=contacerta2024
+NODE_ENV=production
 PORT=3001
-EOL
+EOF
 
 # Executar migrações
-echo -e "\n${YELLOW}Executando migrações...${NC}"
 npx sequelize-cli db:migrate
+check_error "Falha nas migrações do banco de dados"
 
-# Configurar frontend
-echo -e "\n${YELLOW}Configurando frontend...${NC}"
-cd $APP_DIR/frontend
+# Criar usuário admin
+node src/scripts/createAdmin.js
+check_error "Falha na criação do usuário admin"
+
+# 9. Configuração do Frontend
+show_progress "Configurando Frontend"
+cd /var/www/contacerta/frontend
 npm install
+check_error "Falha na instalação das dependências do frontend"
 
-# Criar arquivo .env do frontend
-cat > .env << EOL
-REACT_APP_API_URL=http://$DOMAIN/api
-EOL
+# Criar arquivo .env para o frontend
+cat > .env << EOF
+REACT_APP_API_URL=http://${DOMAIN}/api
+EOF
 
 # Build do frontend
 npm run build
+check_error "Falha no build do frontend"
 
-# Configurar Nginx
-echo -e "\n${YELLOW}Configurando Nginx...${NC}"
-cat > /etc/nginx/sites-available/contacerta << EOL
+# 10. Instalação e configuração do PM2
+show_progress "Configurando PM2"
+sudo npm install -g pm2
+cd /var/www/contacerta/backend
+pm2 start src/server.js --name contacerta-backend
+pm2 startup systemd
+sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $USER --hp /home/$USER
+pm2 save
+check_error "Falha na configuração do PM2"
+
+# 11. Configuração do Nginx
+show_progress "Configurando Nginx"
+sudo tee /etc/nginx/sites-available/contacerta << EOF
 server {
     listen 80;
-    server_name $DOMAIN;
+    server_name ${DOMAIN};
 
-    # Frontend
     location / {
-        root $APP_DIR/frontend/build;
+        root /var/www/contacerta/frontend/build;
+        index index.html;
         try_files \$uri \$uri/ /index.html;
-        add_header Cache-Control "no-cache";
     }
 
-    # Backend API
     location /api {
         proxy_pass http://localhost:3001;
         proxy_http_version 1.1;
@@ -172,73 +146,43 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 
-    # Segurança
+    # Configurações de segurança
     add_header X-Frame-Options "SAMEORIGIN";
     add_header X-XSS-Protection "1; mode=block";
     add_header X-Content-Type-Options "nosniff";
 }
-EOL
+EOF
 
-ln -sf /etc/nginx/sites-available/contacerta /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl restart nginx
+sudo ln -s /etc/nginx/sites-available/contacerta /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+check_error "Falha na configuração do Nginx"
 
-# Iniciar aplicação com PM2
-echo -e "\n${YELLOW}Iniciando aplicação...${NC}"
-cd $APP_DIR/backend
-pm2 start src/server.js --name contacerta-api
-pm2 save
-pm2 startup | bash
+sudo systemctl restart nginx
+check_error "Falha ao reiniciar Nginx"
 
-# Configurar firewall
-echo -e "\n${YELLOW}Configurando firewall...${NC}"
-ufw allow 22
-ufw allow 80
-ufw allow 443
-ufw --force enable
+# 12. Configuração básica de segurança
+show_progress "Configurando segurança básica"
+sudo ufw allow 22
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw --force enable
+check_error "Falha na configuração do firewall"
 
-# Instalar e configurar SSL
-if [[ ! $DOMAIN =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo -e "\n${YELLOW}Instalando Certbot...${NC}"
-    apt install -y certbot python3-certbot-nginx
-    
-    SERVER_IP=$(curl -s ifconfig.me)
-    DOMAIN_IP=$(dig +short $DOMAIN)
-    
-    if [ "$SERVER_IP" = "$DOMAIN_IP" ]; then
-        certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email admin@$DOMAIN --redirect
-        echo -e "${GREEN}SSL configurado com sucesso!${NC}"
-    else
-        echo -e "${YELLOW}AVISO: O domínio $DOMAIN não está apontando para este servidor ($SERVER_IP).${NC}"
-        echo -e "${YELLOW}Configure o DNS primeiro e depois execute:${NC}"
-        echo "certbot --nginx -d $DOMAIN"
-    fi
-fi
+sudo apt install -y fail2ban
+sudo systemctl start fail2ban
+sudo systemctl enable fail2ban
+check_error "Falha na instalação do fail2ban"
 
-# Salvar credenciais
-echo -e "\n${YELLOW}Salvando credenciais...${NC}"
-cat > /root/.contacerta_credentials << EOL
-=== ContaCerta - Credenciais ===
-Data da instalação: $(date)
+# Finalização
+echo -e "${GREEN}=== Instalação do ContaCerta concluída com sucesso! ===${NC}"
+echo -e "${YELLOW}Credenciais de acesso:${NC}"
+echo -e "URL: http://${DOMAIN}"
+echo -e "Email: rayhenrique@gmail.com"
+echo -e "Senha: 1508rcrc"
+echo -e "${YELLOW}Importante: Altere a senha após o primeiro acesso${NC}"
 
-Domínio: $DOMAIN
-MySQL Root Password: $MYSQL_ROOT_PASSWORD
-MySQL User: $MYSQL_USER
-MySQL Password: $MYSQL_PASSWORD
-Database: $MYSQL_DATABASE
-JWT Secret: $JWT_SECRET
-EOL
-
-chmod 600 /root/.contacerta_credentials
-
-echo -e "\n${GREEN}Instalação concluída com sucesso!${NC}"
-echo -e "\n${YELLOW}Informações importantes:${NC}"
-echo "1. As credenciais foram salvas em /root/.contacerta_credentials"
-echo "2. Acesse a aplicação em: http://$DOMAIN"
-echo "3. Para ver os logs: pm2 logs contacerta-api"
-
-# Mostrar status dos serviços
-echo -e "\n${YELLOW}Status dos serviços:${NC}"
-systemctl status mysql --no-pager
-systemctl status nginx --no-pager
+# Exibir status dos serviços
+echo -e "\n${GREEN}=== Status dos serviços ===${NC}"
 pm2 status
+sudo systemctl status nginx --no-pager
