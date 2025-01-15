@@ -29,8 +29,23 @@ module.exports = (sequelize) => {
         },
       },
       date: {
-        type: DataTypes.DATE,
+        type: DataTypes.DATEONLY, // Change to DATEONLY to avoid time zone issues
         allowNull: false,
+        get() {
+          // Always return the date in local time
+          const rawDate = this.getDataValue('date');
+          return rawDate ? new Date(rawDate) : null;
+        },
+        set(val) {
+          // Ensure the date is set without time
+          const date = val instanceof Date ? val : new Date(val);
+          const localDate = new Date(
+            date.getFullYear(), 
+            date.getMonth(), 
+            date.getDate()
+          );
+          this.setDataValue('date', localDate);
+        },
       },
       observation: {
         type: DataTypes.TEXT,

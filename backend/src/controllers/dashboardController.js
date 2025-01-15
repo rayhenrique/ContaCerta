@@ -60,8 +60,7 @@ module.exports = {
         where: {
           date: {
             [Op.between]: [threeMonthsAgo, lastDayOfMonth],
-          },
-          type: 'variable', // Assumindo que existe um campo type para identificar despesas variáveis
+          }
         },
         group: [Sequelize.fn('MONTH', Sequelize.col('date'))],
         raw: true,

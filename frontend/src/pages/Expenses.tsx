@@ -17,16 +17,13 @@ import {
   Alert,
   Grid,
   Chip,
-  InputAdornment,
   SelectChangeEvent,
 } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import {
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-} from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { format } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
-import { canManageDespesa } from '../utils/permissions';
+import { canManageReceita } from '../utils/permissions';
 import api from '../services/api';
 import { NumericFormat } from 'react-number-format';
 
@@ -46,46 +43,54 @@ interface Expense {
   date: string;
   userId: number;
   status: 'pending' | 'confirmed' | 'cancelled';
-  observation: string;
   category?: {
     id: number;
     name: string;
     type: string;
     parentId: number | null;
   };
+  observation: string;
+  classificationId: number | null;
+  classification?: {
+    id: number;
+    name: string;
+  };
+}
+
+interface ExpenseClassification {
+  id: number;
+  name: string;
 }
 
 const Expenses: React.FC = () => {
   const { user } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  const [error, setError] = useState('');
-  const [formData, setFormData] = useState({
-    description: '',
-    value: '',
-    categoryId: null as number | null,
-    date: new Date().toISOString().split('T')[0],
-    observation: '',
-    status: 'pending' as 'pending' | 'confirmed' | 'cancelled',
-  });
-
-  // Estados para as categorias
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedSource, setSelectedSource] = useState<number | null>(null);
-  const [selectedBlock, setSelectedBlock] = useState<number | null>(null);
-  const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
-  const [selectedAction, setSelectedAction] = useState<number | null>(null);
-
-  // Estados para as opções de categorias
   const [sources, setSources] = useState<Category[]>([]);
   const [blocks, setBlocks] = useState<Category[]>([]);
   const [groups, setGroups] = useState<Category[]>([]);
   const [actions, setActions] = useState<Category[]>([]);
+  const [classifications, setClassifications] = useState<ExpenseClassification[]>([]);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [error, setError] = useState('');
+  const [selectedSource, setSelectedSource] = useState<number | null>(null);
+  const [selectedBlock, setSelectedBlock] = useState<number | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
+  const [selectedAction, setSelectedAction] = useState<number | null>(null);
+  const [formData, setFormData] = useState({
+    description: '',
+    value: '',  
+    categoryId: null as number | null,
+    date: new Date().toISOString().split('T')[0],
+    classificationId: null as number | null,
+    status: 'pending' as 'pending' | 'confirmed' | 'cancelled',
+    observation: '',
+  });
 
   useEffect(() => {
     loadExpenses();
     loadCategories();
+    loadClassifications();
   }, []);
 
   const loadExpenses = async () => {
@@ -101,10 +106,8 @@ const Expenses: React.FC = () => {
   const loadCategories = async () => {
     try {
       const response = await api.get('/categories');
-      setCategories(response.data);
       setSources(response.data);
 
-      // Extrair blocos, grupos e ações
       const allBlocks: Category[] = [];
       const allGroups: Category[] = [];
       const allActions: Category[] = [];
@@ -127,6 +130,11 @@ const Expenses: React.FC = () => {
         }
       });
 
+      console.log('Sources:', response.data);
+      console.log('Blocks:', allBlocks);
+      console.log('Groups:', allGroups);
+      console.log('Actions:', allActions);
+
       setBlocks(allBlocks);
       setGroups(allGroups);
       setActions(allActions);
@@ -136,27 +144,60 @@ const Expenses: React.FC = () => {
     }
   };
 
+  const loadClassifications = async () => {
+    try {
+      const response = await api.get('/expense-classifications');
+      setClassifications(response.data);
+    } catch (error) {
+      console.error('Erro ao carregar classificações:', error);
+      setError('Erro ao carregar classificações');
+    }
+  };
+
   const handleOpenDialog = () => {
+    // Use local date without timezone adjustment
+    const localDate = new Date();
+    const formattedDate = `${localDate.getFullYear()}-${
+      String(localDate.getMonth() + 1).padStart(2, '0')
+    }-${String(localDate.getDate()).padStart(2, '0')}`;
+
     setOpenDialog(true);
     setError('');
+    setFormData(prev => ({
+      ...prev,
+      date: formattedDate
+    }));
   };
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setSelectedExpense(null);
-    setFormData({
-      description: '',
-      value: '',
-      categoryId: null,
-      date: new Date().toISOString().split('T')[0],
-      observation: '',
-      status: 'pending',
-    });
     setSelectedSource(null);
     setSelectedBlock(null);
     setSelectedGroup(null);
     setSelectedAction(null);
-    setError('');
+    setFormData({
+      description: '',
+      value: '',  
+      categoryId: null,
+      date: new Date().toISOString().split('T')[0],
+      classificationId: null,
+      status: 'pending',
+      observation: '',
+    });
+  };
+
+  const handleInputChange = (
+    e: 
+      | React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> 
+      | SelectChangeEvent<string | number | ("pending" | "confirmed" | "cancelled")>
+  ) => {
+    const { name, value } = e.target;
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -179,12 +220,26 @@ const Expenses: React.FC = () => {
         return;
       }
 
+      // Ensure the date is in the correct format
+      const inputDate = new Date(formData.date);
+      const year = inputDate.getFullYear();
+      const month = String(inputDate.getMonth() + 1).padStart(2, '0');
+      const day = String(inputDate.getDate() + 1).padStart(2, '0');  // Add 1 to the day
+      const formattedDate = `${year}-${month}-${day}`;
+
+      console.log('Frontend - Original input date:', formData.date);
+      console.log('Frontend - Input date object:', inputDate);
+      console.log('Frontend - Formatted date:', formattedDate);
+
       const data = {
         ...formData,
         value: numericValue,
         categoryId: selectedAction,
         userId: user?.id,
+        date: formattedDate  // Use explicitly formatted date
       };
+
+      console.log('Frontend - Submission data:', data);
 
       if (selectedExpense) {
         await api.put(`/expenses/${selectedExpense.id}`, data);
@@ -200,25 +255,40 @@ const Expenses: React.FC = () => {
     }
   };
 
+  const handleNumericChange = (value: string) => {
+    console.log('Numeric change input:', value);
+    
+    // Directly set the formatted value
+    const formattedValue = `R$ ${value}`.replace('.', ',');
+
+    setFormData((prev) => ({
+      ...prev,
+      value: formattedValue,
+    }));
+  };
+
   const handleEdit = (expense: Expense) => {
     setSelectedExpense(expense);
+    
     const formattedValue = new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      maximumFractionDigits: 2
     }).format(expense.value);
+
+    const formattedDate = format(new Date(expense.date), 'yyyy-MM-dd');
 
     setFormData({
       description: expense.description,
       value: formattedValue,
       categoryId: expense.categoryId,
-      date: expense.date.split('T')[0],
+      date: formattedDate,
+      classificationId: expense.classificationId,
       observation: expense.observation || '',
       status: expense.status,
     });
-    
-    // Encontrar e selecionar a hierarquia completa da categoria
+
     const findCategoryHierarchy = (categoryId: number) => {
       const action = actions.find(a => a.id === categoryId);
       if (action) {
@@ -243,32 +313,13 @@ const Expenses: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Tem certeza que deseja excluir esta despesa?')) {
-      try {
-        await api.delete(`/expenses/${id}`);
-        loadExpenses();
-      } catch (error) {
-        console.error('Erro ao excluir despesa:', error);
-        setError('Erro ao excluir despesa');
-      }
+    try {
+      await api.delete(`/expenses/${id}`);
+      loadExpenses();
+    } catch (error) {
+      console.error('Erro ao excluir despesa:', error);
+      setError('Erro ao excluir despesa');
     }
-  };
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent<string>
-  ) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleNumericChange = (value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      value: value,
-    }));
-  };
-
-  const handleSelectChange = (e: SelectChangeEvent<string>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const columns: GridColDef[] = [
@@ -282,16 +333,14 @@ const Expenses: React.FC = () => {
       field: 'value',
       headerName: 'Valor',
       flex: 1,
-      minWidth: 150,
+      minWidth: 120,
       valueFormatter: (params) => {
-        const value = Number(params.value);
-        if (isNaN(value)) return 'R$ 0,00';
         return new Intl.NumberFormat('pt-BR', {
           style: 'currency',
           currency: 'BRL',
           minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        }).format(value);
+          maximumFractionDigits: 2
+        }).format(params.value);
       },
     },
     {
@@ -318,6 +367,17 @@ const Expenses: React.FC = () => {
       },
     },
     {
+      field: 'classification',
+      headerName: 'Classificação',
+      flex: 1,
+      minWidth: 150,
+      valueGetter: (params) => {
+        const expense = params.row;
+        const classification = classifications.find(c => c.id === expense.classificationId);
+        return classification ? classification.name : '-';
+      },
+    },
+    {
       field: 'date',
       headerName: 'Data',
       flex: 1,
@@ -332,9 +392,9 @@ const Expenses: React.FC = () => {
       width: 130,
       renderCell: (params) => {
         const statusColors = {
-          pending: '#FFA726',    // Laranja
-          confirmed: '#66BB6A',  // Verde
-          cancelled: '#EF5350'   // Vermelho
+          pending: '#FFA726',    
+          confirmed: '#66BB6A',  
+          cancelled: '#EF5350'   
         };
         const statusLabels = {
           pending: 'Pendente',
@@ -396,8 +456,9 @@ const Expenses: React.FC = () => {
           <Typography variant="h6">Despesas</Typography>
           <Button
             variant="contained"
+            startIcon={<AddIcon />}
             onClick={handleOpenDialog}
-            disabled={!canManageDespesa(user)}
+            disabled={!canManageReceita(user)}
           >
             Nova Despesa
           </Button>
@@ -421,7 +482,7 @@ const Expenses: React.FC = () => {
           />
         </Box>
       </Paper>
-
+      
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
           {selectedExpense ? 'Editar Despesa' : 'Nova Despesa'}
@@ -444,9 +505,12 @@ const Expenses: React.FC = () => {
                   customInput={TextField}
                   label="Valor"
                   fullWidth
-                  value={formData.value}
+                  name="value"
+                  value={formData.value.replace('R$ ', '').replace('.', ',')}
                   onValueChange={(values) => {
-                    handleNumericChange(values.formattedValue);
+                    console.log('NumericFormat values:', values);
+                    // Use the numeric value for parsing
+                    handleNumericChange(values.value);
                   }}
                   thousandSeparator="."
                   decimalSeparator=","
@@ -475,7 +539,7 @@ const Expenses: React.FC = () => {
                   <Select
                     name="status"
                     value={formData.status}
-                    onChange={handleSelectChange}
+                    onChange={handleInputChange}
                     label="Status"
                     required
                   >
@@ -489,19 +553,18 @@ const Expenses: React.FC = () => {
                 <FormControl fullWidth>
                   <InputLabel>Fonte</InputLabel>
                   <Select
-                    value={selectedSource || ''}
+                    value={selectedSource?.toString() || ''}
                     onChange={(e) => {
-                      const sourceId = e.target.value as number;
+                      const sourceId = Number(e.target.value);
                       setSelectedSource(sourceId);
                       setSelectedBlock(null);
                       setSelectedGroup(null);
                       setSelectedAction(null);
                     }}
                     label="Fonte"
-                    required
                   >
                     {sources.map((source) => (
-                      <MenuItem key={source.id} value={source.id}>
+                      <MenuItem key={source.id} value={source.id.toString()}>
                         {source.name}
                       </MenuItem>
                     ))}
@@ -513,20 +576,19 @@ const Expenses: React.FC = () => {
                   <FormControl fullWidth>
                     <InputLabel>Bloco</InputLabel>
                     <Select
-                      value={selectedBlock || ''}
+                      value={selectedBlock?.toString() || ''}
                       onChange={(e) => {
-                        const blockId = e.target.value as number;
+                        const blockId = Number(e.target.value);
                         setSelectedBlock(blockId);
                         setSelectedGroup(null);
                         setSelectedAction(null);
                       }}
                       label="Bloco"
-                      required
                     >
                       {blocks
                         .filter((block) => block.parentId === selectedSource)
                         .map((block) => (
-                          <MenuItem key={block.id} value={block.id}>
+                          <MenuItem key={block.id} value={block.id.toString()}>
                             {block.name}
                           </MenuItem>
                         ))}
@@ -539,19 +601,18 @@ const Expenses: React.FC = () => {
                   <FormControl fullWidth>
                     <InputLabel>Grupo</InputLabel>
                     <Select
-                      value={selectedGroup || ''}
+                      value={selectedGroup?.toString() || ''}
                       onChange={(e) => {
-                        const groupId = e.target.value as number;
+                        const groupId = Number(e.target.value);
                         setSelectedGroup(groupId);
                         setSelectedAction(null);
                       }}
                       label="Grupo"
-                      required
                     >
                       {groups
                         .filter((group) => group.parentId === selectedBlock)
                         .map((group) => (
-                          <MenuItem key={group.id} value={group.id}>
+                          <MenuItem key={group.id} value={group.id.toString()}>
                             {group.name}
                           </MenuItem>
                         ))}
@@ -564,18 +625,17 @@ const Expenses: React.FC = () => {
                   <FormControl fullWidth>
                     <InputLabel>Ação</InputLabel>
                     <Select
-                      value={selectedAction || ''}
+                      value={selectedAction?.toString() || ''}
                       onChange={(e) => {
-                        const actionId = e.target.value as number;
+                        const actionId = Number(e.target.value);
                         setSelectedAction(actionId);
                       }}
                       label="Ação"
-                      required
                     >
                       {actions
                         .filter((action) => action.parentId === selectedGroup)
                         .map((action) => (
-                          <MenuItem key={action.id} value={action.id}>
+                          <MenuItem key={action.id} value={action.id.toString()}>
                             {action.name}
                           </MenuItem>
                         ))}
@@ -584,22 +644,40 @@ const Expenses: React.FC = () => {
                 </Grid>
               )}
               <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Classificação</InputLabel>
+                  <Select
+                    name="classificationId"
+                    value={formData.classificationId?.toString() || ''}
+                    onChange={handleInputChange}
+                    label="Classificação"
+                  >
+                    {classifications.map((classification) => (
+                      <MenuItem key={classification.id} value={classification.id.toString()}>
+                        {classification.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12}>
                 <TextField
+                  margin="dense"
                   label="Observação"
-                  name="observation"
                   fullWidth
-                  multiline
-                  rows={4}
                   value={formData.observation}
                   onChange={handleInputChange}
+                  name="observation"
                 />
               </Grid>
             </Grid>
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleCloseDialog}>Cancelar</Button>
-            <Button type="submit" variant="contained">
-              {selectedExpense ? 'Salvar' : 'Criar'}
+            <Button onClick={handleCloseDialog} color="secondary">
+              Cancelar
+            </Button>
+            <Button type="submit" color="primary" variant="contained">
+              Salvar
             </Button>
           </DialogActions>
         </form>

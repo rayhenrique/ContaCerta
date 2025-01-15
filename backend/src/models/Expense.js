@@ -5,6 +5,7 @@ module.exports = (sequelize) => {
     static associate(models) {
       Expense.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
       Expense.belongsTo(models.Category, { foreignKey: 'categoryId', as: 'category' });
+      Expense.belongsTo(models.ExpenseClassification, { foreignKey: 'classificationId', as: 'classification' });
     }
   }
 
@@ -29,12 +30,23 @@ module.exports = (sequelize) => {
         },
       },
       date: {
-        type: DataTypes.DATE,
+        type: DataTypes.DATEONLY, // Change to DATEONLY to avoid time zone issues
         allowNull: false,
-      },
-      observation: {
-        type: DataTypes.TEXT,
-        allowNull: true,
+        get() {
+          // Always return the date in local time
+          const rawDate = this.getDataValue('date');
+          return rawDate ? new Date(rawDate) : null;
+        },
+        set(val) {
+          // Ensure the date is set without time
+          const date = val instanceof Date ? val : new Date(val);
+          const localDate = new Date(
+            date.getFullYear(), 
+            date.getMonth(), 
+            date.getDate()
+          );
+          this.setDataValue('date', localDate);
+        },
       },
       userId: {
         type: DataTypes.INTEGER,
@@ -43,6 +55,10 @@ module.exports = (sequelize) => {
       categoryId: {
         type: DataTypes.INTEGER,
         allowNull: false,
+      },
+      classificationId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
       },
       status: {
         type: DataTypes.STRING,

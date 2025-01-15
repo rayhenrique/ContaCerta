@@ -1,19 +1,19 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import Layout from '../components/Layout';
-import Login from '../pages/Login';
-import Dashboard from '../pages/Dashboard';
-import Categories from '../pages/Categories';
-import Expenses from '../pages/Expenses';
-import Revenues from '../pages/Revenues';
-import Reports from '../pages/Reports';
-import Users from '../pages/Users';
-import Profile from '../pages/Profile';
-import UserManual from '../pages/UserManual';
-import ExpenseClassifications from '../pages/ExpenseClassifications';
+import { useAuth } from './contexts/AuthContext';
+import Layout from './components/Layout';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Categories from './pages/Categories';
+import Expenses from './pages/Expenses';
+import Revenues from './pages/Revenues';
+import Reports from './pages/Reports';
+import Users from './pages/Users';
+import Profile from './pages/Profile';
+import UserManual from './pages/UserManual';
+import ExpenseClassifications from './pages/ExpenseClassifications';
 
-export default function AppRoutes() {
+const AppRoutes: React.FC = () => {
   const { isAuthenticated } = useAuth();
 
   if (!isAuthenticated) {
@@ -42,4 +42,6 @@ export default function AppRoutes() {
       </Route>
     </Routes>
   );
-}
+};
+
+export default AppRoutes; 

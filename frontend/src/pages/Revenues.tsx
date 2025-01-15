@@ -66,7 +66,7 @@ const Revenues: React.FC = () => {
     description: '',
     value: '',
     categoryId: null as number | null,
-    date: new Date().toISOString().split('T')[0],
+    date: '',
     observation: '',
     status: 'pending' as 'pending' | 'confirmed' | 'cancelled',
   });
@@ -138,8 +138,15 @@ const Revenues: React.FC = () => {
   };
 
   const handleOpenDialog = () => {
+    const localDate = new Date();
+    const formattedDate = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+
     setOpenDialog(true);
     setError('');
+    setFormData(prev => ({
+      ...prev,
+      date: formattedDate
+    }));
   };
 
   const handleCloseDialog = () => {
@@ -149,7 +156,7 @@ const Revenues: React.FC = () => {
       description: '',
       value: '',
       categoryId: null,
-      date: new Date().toISOString().split('T')[0],
+      date: '',
       observation: '',
       status: 'pending',
     });
@@ -180,11 +187,20 @@ const Revenues: React.FC = () => {
         return;
       }
 
+      // Ensure the date is at midnight in local time
+      const inputDate = new Date(formData.date);
+      const localDate = new Date(
+        inputDate.getFullYear(), 
+        inputDate.getMonth(), 
+        inputDate.getDate()
+      );
+
       const data = {
         ...formData,
         value: numericValue,
         categoryId: selectedAction,
         userId: user?.id,
+        date: localDate.toISOString().split('T')[0]  // Use YYYY-MM-DD format
       };
 
       if (selectedRevenue) {

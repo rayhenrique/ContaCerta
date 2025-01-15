@@ -1,94 +1,93 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import api from '../services/api';
 
-interface User {
+export interface User {
   id: number;
   name: string;
   email: string;
+  role: string;
   accessLevel: 'admin' | 'operator';
 }
 
-interface AuthError extends Error {
-  response?: {
-    data?: {
-      message?: string;
-    };
-  };
+interface AuthState {
+  token: string;
+  user: User;
+}
+
+interface SignInCredentials {
+  email: string;
+  password: string;
 }
 
 interface AuthContextData {
-  user: User | null;
+  user: User;
   loading: boolean;
-  signIn(email: string, password: string): Promise<void>;
+  isAuthenticated: boolean;
+  signIn(credentials: SignInCredentials): Promise<void>;
   signOut(): void;
+  updateUser(user: User): void;
 }
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [data, setData] = useState<AuthState>(() => {
+    const token = localStorage.getItem('@ContaCerta:token');
+    const user = localStorage.getItem('@ContaCerta:user');
+
+    if (token && user) {
+      api.defaults.headers.authorization = `Bearer ${token}`;
+      return { token, user: JSON.parse(user) };
+    }
+
+    return {} as AuthState;
+  });
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
 
-  useEffect(() => {
-    const loadStoredData = async () => {
-      try {
-        const storedToken = localStorage.getItem('@ContaCerta:token');
-        const storedUser = localStorage.getItem('@ContaCerta:user');
+  const signIn = useCallback(async ({ email, password }: SignInCredentials) => {
+    const response = await api.post('auth/login', {
+      email,
+      password,
+    });
 
-        if (storedToken && storedUser) {
-          api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-          setUser(JSON.parse(storedUser));
-        }
-      } catch (error) {
-        localStorage.removeItem('@ContaCerta:token');
-        localStorage.removeItem('@ContaCerta:user');
-      } finally {
-        setLoading(false);
-      }
-    };
+    const { token, user } = response.data;
 
-    loadStoredData();
+    localStorage.setItem('@ContaCerta:token', token);
+    localStorage.setItem('@ContaCerta:user', JSON.stringify(user));
+
+    api.defaults.headers.authorization = `Bearer ${token}`;
+
+    setData({ token, user });
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    try {
-      const response = await api.post('/auth/login', {
-        email,
-        password,
-      });
-
-      const { token, user: userData } = response.data;
-
-      localStorage.setItem('@ContaCerta:token', token);
-      localStorage.setItem('@ContaCerta:user', JSON.stringify(userData));
-
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      setUser(userData);
-      navigate('/');
-    } catch (error) {
-      const authError = error as AuthError;
-      const errorMessage = authError.response?.data?.message || 'Erro ao fazer login. Verifique suas credenciais.';
-      throw new Error(errorMessage);
-    }
-  };
-
-  const signOut = () => {
+  const signOut = useCallback(() => {
     localStorage.removeItem('@ContaCerta:token');
     localStorage.removeItem('@ContaCerta:user');
-    setUser(null);
-    delete api.defaults.headers.common['Authorization'];
-    navigate('/login');
-  };
+
+    setData({} as AuthState);
+  }, []);
+
+  const updateUser = useCallback(
+    (user: User) => {
+      localStorage.setItem('@ContaCerta:user', JSON.stringify(user));
+
+      setData({
+        token: data.token,
+        user,
+      });
+    },
+    [data.token],
+  );
 
   return (
     <AuthContext.Provider
       value={{
-        user,
+        user: data.user,
         loading,
+        isAuthenticated: !!data.token,
         signIn,
         signOut,
+        updateUser,
       }}
     >
       {children}
@@ -96,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useAuth = () => {
+function useAuth(): AuthContextData {
   const context = useContext(AuthContext);
 
   if (!context) {
@@ -104,6 +103,6 @@ export const useAuth = () => {
   }
 
   return context;
-};
+}
 
-export type { User };
+export { AuthProvider, useAuth };

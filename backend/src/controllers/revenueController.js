@@ -71,16 +71,33 @@ module.exports = {
 
   async create(req, res) {
     try {
-      const { categoryId } = req.body;
+      const { 
+        description, 
+        value, 
+        date, 
+        categoryId, 
+        userId, 
+        status = 'pending', 
+        observation 
+      } = req.body;
 
-      const category = await Category.findByPk(categoryId);
-      if (!category) {
-        return res.status(400).json({ error: 'Categoria não encontrada' });
-      }
+      // Parse the date and create a new Date object at midnight local time
+      const parsedDate = new Date(date);
+      const localDate = new Date(
+        parsedDate.getFullYear(), 
+        parsedDate.getMonth(), 
+        parsedDate.getDate(), 
+        0, 0, 0, 0  // Set to start of the day
+      );
 
       const revenue = await Revenue.create({
-        ...req.body,
-        userId: req.userId,
+        description,
+        value,
+        date: localDate,  // Use the local date at midnight
+        categoryId,
+        userId,
+        status,
+        observation
       });
 
       return res.status(201).json(revenue);
@@ -92,22 +109,42 @@ module.exports = {
 
   async update(req, res) {
     try {
-      const revenue = await Revenue.findByPk(req.params.id);
+      const { id } = req.params;
+      const { 
+        description, 
+        value, 
+        date, 
+        categoryId, 
+        status, 
+        observation 
+      } = req.body;
 
-      if (!revenue) {
-        return res.status(404).json({ error: 'Receita não encontrada' });
+      // Parse the date and create a new Date object at midnight local time
+      const parsedDate = new Date(date);
+      const localDate = new Date(
+        parsedDate.getFullYear(), 
+        parsedDate.getMonth(), 
+        parsedDate.getDate(), 
+        0, 0, 0, 0  // Set to start of the day
+      );
+
+      const [updated] = await Revenue.update({
+        description,
+        value,
+        date: localDate,  // Use the local date at midnight
+        categoryId,
+        status,
+        observation
+      }, {
+        where: { id }
+      });
+
+      if (updated) {
+        const updatedRevenue = await Revenue.findByPk(id);
+        return res.json(updatedRevenue);
       }
 
-      if (req.body.categoryId) {
-        const category = await Category.findByPk(req.body.categoryId);
-        if (!category) {
-          return res.status(400).json({ error: 'Categoria não encontrada' });
-        }
-      }
-
-      await revenue.update(req.body);
-
-      return res.json(revenue);
+      return res.status(404).json({ error: 'Receita não encontrada' });
     } catch (error) {
       console.error('Erro ao atualizar receita:', error);
       return res.status(500).json({ error: 'Erro interno do servidor' });

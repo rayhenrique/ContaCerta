@@ -7,6 +7,7 @@ const revenueController = require('../controllers/revenueController');
 const expenseController = require('../controllers/expenseController');
 const dashboardController = require('../controllers/dashboardController');
 const reportController = require('../controllers/reportController');
+const expenseClassificationController = require('../controllers/expenseClassificationController');
 
 const router = express.Router();
 
@@ -39,10 +40,15 @@ router.delete('/revenues/:id', revenueController.delete);
 
 // Rotas de despesas
 router.get('/expenses', expenseController.index);
-router.post('/expenses', expenseController.create);
-router.get('/expenses/:id', expenseController.show);
+router.post('/expenses', expenseController.store);
 router.put('/expenses/:id', expenseController.update);
-router.delete('/expenses/:id', expenseController.delete);
+router.delete('/expenses/:id', expenseController.destroy);
+
+// Rotas de classificação de despesas
+router.get('/expense-classifications', expenseClassificationController.index);
+router.post('/expense-classifications', expenseClassificationController.store);
+router.put('/expense-classifications/:id', expenseClassificationController.update);
+router.delete('/expense-classifications/:id', expenseClassificationController.destroy);
 
 // Rota do dashboard
 router.get('/dashboard', dashboardController.index);

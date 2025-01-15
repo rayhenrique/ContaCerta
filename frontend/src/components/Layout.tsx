@@ -67,8 +67,10 @@ const Layout: React.FC = () => {
     { text: 'Receitas', icon: <AttachMoney />, path: '/revenues' },
     { text: 'Despesas', icon: <MoneyOff />, path: '/expenses' },
     { text: 'Categorias', icon: <Category />, path: '/categories' },
+    { text: 'Classificações de Despesas', icon: <Category />, path: '/expense-classifications' },
     { text: 'Usuários', icon: <People />, path: '/users' },
     { text: 'Relatórios', icon: <Assessment />, path: '/reports' },
+    { text: 'Manual do Usuário', icon: <Help />, path: '/manual' },
   ];
 
   return (
@@ -167,12 +169,6 @@ const Layout: React.FC = () => {
               open={Boolean(anchorEl)}
               onClose={handleClose}
             >
-              <MenuItem onClick={() => navigate('/manual')}>
-                <ListItemIcon>
-                  <Help fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Manual do Usuário</ListItemText>
-              </MenuItem>
               <MenuItem onClick={handleProfile}>
                 <ListItemIcon>
                   <Person fontSize="small" />
@@ -236,31 +232,16 @@ const Layout: React.FC = () => {
         <Box sx={{ overflow: 'auto' }}>
           <List>
             {menuItems.map((item) => (
-              <ListItem
-                button
-                key={item.text}
+              <ListItem 
+                key={item.text} 
+                button 
                 onClick={() => {
                   navigate(item.path);
                   handleDrawerClose();
                 }}
-                sx={{
-                  mb: 1,
-                  borderRadius: 1,
-                  '&:hover': {
-                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
-                  },
-                }}
               >
-                <ListItemIcon sx={{ color: '#4F46E5' }}>{item.icon}</ListItemIcon>
-                <ListItemText
-                  primary={item.text}
-                  sx={{
-                    '& .MuiTypography-root': {
-                      fontWeight: 500,
-                      color: '#1F2937',
-                    },
-                  }}
-                />
+                <ListItemIcon>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.text} />
               </ListItem>
             ))}
           </List>

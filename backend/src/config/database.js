@@ -11,6 +11,10 @@ module.exports = {
       timestamps: true,
       underscored: true,
     },
+    timezone: '-03:00', // Explicitly set to Brazil time
+    dialectOptions: {
+      timezone: '-03:00', // Ensure timezone is set for MySQL
+    },
     logging: false
   },
   test: {
@@ -23,6 +27,10 @@ module.exports = {
       timestamps: true,
       underscored: true,
     },
+    timezone: '-03:00', // Explicitly set to Brazil time
+    dialectOptions: {
+      timezone: '-03:00', // Ensure timezone is set for MySQL
+    },
     logging: false
   },
   production: {
@@ -34,6 +42,10 @@ module.exports = {
     define: {
       timestamps: true,
       underscored: true,
+    },
+    timezone: '-03:00', // Explicitly set to Brazil time
+    dialectOptions: {
+      timezone: '-03:00', // Ensure timezone is set for MySQL
     },
     logging: false
   }
