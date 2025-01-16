@@ -69,9 +69,31 @@ module.exports = {
               }]
             }
           ],
-          order: [['date', 'DESC']]
+          order: [['date', 'ASC']]
         });
-        return res.json(revenues);
+
+        // Group revenues by month or day
+        const groupedData = revenues.reduce((acc, revenue) => {
+          const date = new Date(revenue.date);
+          const key = req.query.reportType === 'daily' 
+            ? date.toISOString().split('T')[0] 
+            : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          
+          acc[key] = (acc[key] || 0) + revenue.value;
+          return acc;
+        }, {});
+
+        const labels = Object.keys(groupedData).sort();
+        const data = labels.map(label => groupedData[label]);
+
+        return res.json({
+          labels,
+          datasets: [{
+            label: 'Receitas',
+            data,
+            backgroundColor: 'rgba(75, 192, 192, 0.6)'
+          }]
+        });
       }
 
       if (type === 'expenses') {
@@ -94,9 +116,31 @@ module.exports = {
               attributes: ['id', 'name']
             }
           ],
-          order: [['date', 'DESC']]
+          order: [['date', 'ASC']]
         });
-        return res.json(expenses);
+
+        // Group expenses by month or day
+        const groupedData = expenses.reduce((acc, expense) => {
+          const date = new Date(expense.date);
+          const key = req.query.reportType === 'daily' 
+            ? date.toISOString().split('T')[0] 
+            : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          
+          acc[key] = (acc[key] || 0) + expense.value;
+          return acc;
+        }, {});
+
+        const labels = Object.keys(groupedData).sort();
+        const data = labels.map(label => groupedData[label]);
+
+        return res.json({
+          labels,
+          datasets: [{
+            label: 'Despesas',
+            data,
+            backgroundColor: 'rgba(255, 99, 132, 0.6)'
+          }]
+        });
       }
 
       return res.status(400).json({ error: 'Tipo de relatório inválido' });
