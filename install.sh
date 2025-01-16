@@ -152,7 +152,7 @@ check_error "Falha na configuração do MySQL"
 show_progress "Configurando diretório da aplicação"
 sudo mkdir -p /var/www/contacerta
 cd /var/www/contacerta
-sudo git clone https://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@github.com/rayhenrique/ContaCerta.git
+sudo git clone https://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@github.com/rayhenrique/ContaCerta.git .
 check_error "Falha no clone do repositório"
 
 # 7. Configuração de permissões
