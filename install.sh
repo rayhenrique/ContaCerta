@@ -181,14 +181,34 @@ while true; do
     DB_NAME=${DB_NAME:-contacerta}
 
     # Opcional: Validar conexão MySQL
-    if mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e ";" 2>/dev/null; then
+    echo -e "${YELLOW}Validando conexão MySQL...${NC}"
+    MYSQL_PWD='SuaSenhaMySQLForte123!' mysql -u "$MYSQL_USER" -e ";" 2>/dev/null
+    if [ $? -eq 0 ]; then
         break
     else
         echo -e "${RED}Falha na conexão MySQL. Verifique suas credenciais.${NC}"
+        echo -e "${YELLOW}Dicas de solução:${NC}"
+        echo "1. Verifique se o MySQL está instalado corretamente"
+        echo "2. Confirme se a senha está correta"
+        echo "3. Tente reiniciar o serviço MySQL: sudo systemctl restart mysql"
     fi
 done
 
-# Configuração do servidor
+# Configurar MySQL seguramente
+echo -e "${YELLOW}Configurando MySQL...${NC}"
+sudo mysql <<MYSQL_SCRIPT
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_PASSWORD';
+FLUSH PRIVILEGES;
+MYSQL_SCRIPT
+
+# Criar banco de dados se não existir
+echo -e "${YELLOW}Criando banco de dados...${NC}"
+sudo mysql -u root -p"$MYSQL_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;" || {
+    echo -e "${RED}Falha ao criar banco de dados. Verifique suas credenciais MySQL.${NC}"
+    exit 1
+}
+
+# Configurar servidor
 read -p "Deseja configurar um servidor de produção? (s/n): " PRODUCTION_SERVER
 PRODUCTION_SERVER=${PRODUCTION_SERVER:-n}
 
