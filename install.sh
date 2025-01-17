@@ -169,8 +169,8 @@ if [[ "$CONFIRM" =~ ^[Ss]$ ]]; then
     echo -e "\n${GREEN}Iniciando instalação...${NC}"
 
     # Clone Repository
-    git clone "$GIT_REPO" contacerta
-    cd contacerta
+    git clone "$GIT_REPO" .
+    # Usando "." para clonar no diretório atual, em vez de criar uma subpasta
 
     # Backend Setup
     cd backend
