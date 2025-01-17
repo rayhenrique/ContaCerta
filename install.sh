@@ -1,12 +1,50 @@
 #!/bin/bash
 
-# Colors for output
+# Cores para saída
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m' # Sem Cor
 
-# Function to validate domain
+# Função para preparar o ambiente do sistema
+prepare_system() {
+    echo -e "${YELLOW}Preparando o ambiente do sistema...${NC}"
+    
+    # Atualizar sistema
+    echo -e "${GREEN}Atualizando sistema...${NC}"
+    sudo apt update && sudo apt upgrade -y
+
+    # Instalar dependências básicas
+    echo -e "${GREEN}Instalando dependências básicas...${NC}"
+    sudo apt install -y git curl wget software-properties-common
+
+    # Instalar Node.js
+    echo -e "${GREEN}Instalando Node.js...${NC}"
+    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+    sudo apt install -y nodejs
+
+    # Instalar Nginx
+    echo -e "${GREEN}Instalando Nginx...${NC}"
+    sudo apt install -y nginx
+
+    # Instalar Certbot
+    echo -e "${GREEN}Instalando Certbot...${NC}"
+    sudo apt install -y certbot python3-certbot-nginx
+
+    # Instalar PM2
+    echo -e "${GREEN}Instalando PM2...${NC}"
+    sudo npm install -g pm2
+
+    # Configurar Firewall
+    echo -e "${GREEN}Configurando Firewall...${NC}"
+    sudo ufw allow 'Nginx Full'
+    sudo ufw allow OpenSSH
+    sudo ufw enable
+
+    echo -e "${GREEN}Preparação do sistema concluída!${NC}"
+}
+
+# Função para validar domínio
 validate_domain() {
     local domain=$1
     if [[ $domain =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9](\.[a-zA-Z]{2,})+$ ]]; then
@@ -16,7 +54,7 @@ validate_domain() {
     fi
 }
 
-# Function to validate IP address
+# Função para validar IP
 validate_ip() {
     local ip=$1
     if [[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -26,7 +64,7 @@ validate_ip() {
     fi
 }
 
-# Function to validate email
+# Função para validar email
 validate_email() {
     local email=$1
     if [[ $email =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
@@ -36,31 +74,31 @@ validate_email() {
     fi
 }
 
-# Function to install SSL certificate
+# Função para instalar certificado SSL
 install_ssl_certificate() {
     local domain=$1
     local email=$2
 
     echo -e "\n${YELLOW}Configurando Certificado SSL para $domain${NC}"
 
-    # Check if Certbot is installed
+    # Verificar se Certbot está instalado
     if ! command -v certbot &> /dev/null; then
         echo -e "${YELLOW}Instalando Certbot...${NC}"
         sudo apt-get update
         sudo apt-get install -y certbot python3-certbot-nginx
     fi
 
-    # Obtain SSL certificate
+    # Obter certificado SSL
     echo -e "${GREEN}Obtendo certificado SSL com Certbot...${NC}"
     sudo certbot certonly --nginx -d "$domain" -d "www.$domain" --non-interactive --agree-tos -m "$email"
 
-    # Configure Nginx for SSL
+    # Configurar Nginx para SSL
     if [ -f "/etc/nginx/sites-available/contacerta" ]; then
         sudo sed -i 's/listen 80;/listen 443 ssl;/' /etc/nginx/sites-available/contacerta
         sudo sed -i "/listen 443 ssl;/a \    ssl_certificate /etc/letsencrypt/live/$domain/fullchain.pem;" /etc/nginx/sites-available/contacerta
         sudo sed -i "/ssl_certificate.*/a \    ssl_certificate_key /etc/letsencrypt/live/$domain/privkey.pem;" /etc/nginx/sites-available/contacerta
 
-        # Add HTTP to HTTPS redirect
+        # Adicionar redirecionamento HTTP para HTTPS
         sudo tee -a /etc/nginx/sites-available/contacerta << EOF
 
 server {
@@ -77,14 +115,17 @@ EOF
     fi
 }
 
-# Clear screen
+# Limpar tela
 clear
 
 echo -e "${YELLOW}===== ContaCerta - Instalação Automática =====${NC}"
 echo -e "${GREEN}Bem-vindo ao assistente de instalação do ContaCerta!${NC}"
 echo ""
 
-# Prompt for Server Address
+# Preparar sistema
+prepare_system
+
+# Prompt para endereço do servidor
 while true; do
     echo "Escolha o tipo de endereço do servidor:"
     echo "1. Domínio"
@@ -122,13 +163,13 @@ while ! validate_email "$ADMIN_EMAIL"; do
     read -p "Digite seu email de administrador: " ADMIN_EMAIL
 done
 
-# SSL Configuration
+# Configuração SSL
 if [[ "$ADDRESS_TYPE" -eq 1 ]]; then
     read -p "Deseja configurar certificado SSL para o domínio? (s/n): " SSL_CONFIG
     SSL_CONFIG=${SSL_CONFIG:-n}
 fi
 
-# Database Configuration
+# Configuração do banco de dados
 while true; do
     read -p "Digite o nome de usuário do MySQL (padrão: root): " MYSQL_USER
     MYSQL_USER=${MYSQL_USER:-root}
@@ -139,7 +180,7 @@ while true; do
     read -p "Digite o nome do banco de dados (padrão: contacerta): " DB_NAME
     DB_NAME=${DB_NAME:-contacerta}
 
-    # Optional: Validate MySQL connection
+    # Opcional: Validar conexão MySQL
     if mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e ";" 2>/dev/null; then
         break
     else
@@ -147,7 +188,7 @@ while true; do
     fi
 done
 
-# Server Configuration
+# Configuração do servidor
 read -p "Deseja configurar um servidor de produção? (s/n): " PRODUCTION_SERVER
 PRODUCTION_SERVER=${PRODUCTION_SERVER:-n}
 
@@ -155,7 +196,7 @@ if [[ "$PRODUCTION_SERVER" =~ ^[Ss]$ ]]; then
     read -p "Digite o usuário SSH para deploy: " SSH_USER
 fi
 
-# Confirm Installation
+# Confirmar instalação
 echo -e "\n${YELLOW}Resumo da Instalação:${NC}"
 echo "Endereço do Servidor: $SERVER_ADDRESS"
 echo "Repositório Git: $GIT_REPO"
@@ -168,44 +209,44 @@ read -p "Confirma estas informações? (s/n): " CONFIRM
 if [[ "$CONFIRM" =~ ^[Ss]$ ]]; then
     echo -e "\n${GREEN}Iniciando instalação...${NC}"
 
-    # Clone Repository
+    # Clonar repositório
     git clone "$GIT_REPO" .
     # Usando "." para clonar no diretório atual, em vez de criar uma subpasta
 
-    # Backend Setup
+    # Configuração do backend
     cd backend
     npm install
     cp .env.example .env
 
-    # Update .env file with collected information
+    # Atualizar arquivo .env com informações coletadas
     sed -i "s/DB_USER=.*/DB_USER=$MYSQL_USER/" .env
     sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=$MYSQL_PASSWORD/" .env
     sed -i "s/DB_NAME=.*/DB_NAME=$DB_NAME/" .env
     sed -i "s/ADMIN_EMAIL=.*/ADMIN_EMAIL=$ADMIN_EMAIL/" .env
     sed -i "s/SERVER_ADDRESS=.*/SERVER_ADDRESS=$SERVER_ADDRESS/" .env
 
-    # Database Setup
+    # Configuração do banco de dados
     mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;"
     npm run migrate
     npm run seed
 
-    # Create Admin User (if not already exists)
+    # Criar usuário administrador (se não existir)
     echo -e "\n${YELLOW}Criando usuário administrador...${NC}"
     node src/scripts/createAdmin.js || {
         echo -e "${RED}Falha ao criar usuário administrador.${NC}"
         exit 1
     }
 
-    # Frontend Setup
+    # Configuração do frontend
     cd ../frontend
     npm install
 
-    # Production Configuration (Optional)
+    # Configuração de produção (opcional)
     if [[ "$PRODUCTION_SERVER" =~ ^[Ss]$ ]]; then
-        # Nginx configuration, PM2 setup, etc.
+        # Configuração do Nginx, PM2, etc.
         echo "Configurações de produção serão implementadas"
 
-        # SSL Configuration for Domain
+        # Configuração SSL para domínio
         if [[ "$ADDRESS_TYPE" -eq 1 ]] && [[ "$SSL_CONFIG" =~ ^[Ss]$ ]]; then
             install_ssl_certificate "$SERVER_ADDRESS" "$ADMIN_EMAIL"
         fi
