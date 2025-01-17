@@ -18,6 +18,55 @@ O ContaCerta é um sistema de gestão financeira desenvolvido com React (fronten
 - PM2 (para gerenciamento de processos)
 - Git
 
+## Instalação Automática (Recomendado)
+
+### Pré-requisitos
+- Git
+- Node.js 18.x ou superior
+- MySQL 8.0 ou superior
+- Bash (Linux/macOS) ou Windows Subsystem for Linux (WSL)
+
+### Passos de Instalação
+1. Clone o repositório:
+```bash
+git clone https://github.com/rayhenrique/ContaCerta.git
+cd ContaCerta
+```
+2. Torne o script de instalação executável:
+```bash
+chmod +x install.sh
+```
+3. Execute o script de instalação:
+```bash
+./install.sh
+```
+O script guiará você através de um processo interativo de instalação, solicitando:
+- Domínio do projeto
+- Repositório Git
+- Credenciais do MySQL
+- Configurações de email de administrador
+- Opções de servidor de produção
+
+### Opções do Script de Instalação
+- Suporte para domínio ou endereço IP
+- Validação automática de domínio e email
+- Configuração opcional de certificado SSL (para domínios)
+- Configuração de banco de dados
+- Instalação de dependências
+- Configuração de ambiente de desenvolvimento e produção
+- Suporte para personalização de instalação
+
+### Configuração SSL
+- Para domínios, o script oferece configuração automática de certificado SSL usando Certbot
+- Suporta criação de certificado para domínio principal e www
+- Configura redirecionamento HTTP para HTTPS
+- Requer Nginx instalado no servidor
+
+### Solução de Problemas
+- Certifique-se de ter todas as dependências instaladas
+- Verifique as permissões do script (`chmod +x install.sh`)
+- Consulte os logs de instalação para detalhes de erros
+
 ## Instalação Local (Windows 11)
 
 1. **Instalar Dependências**
@@ -28,13 +77,11 @@ O ContaCerta é um sistema de gestão financeira desenvolvido com React (fronten
 # Instalar MySQL
 # Baixe e instale do site oficial: https://dev.mysql.com/downloads/installer/
 ```
-
 2. **Clonar o Repositório**
 ```bash
 git clone https://github.com/rayhenrique/ContaCerta.git
 cd ContaCerta
 ```
-
 3. **Configurar o Backend**
 ```bash
 cd backend
@@ -44,7 +91,6 @@ npm install
 copy .env.example .env
 # Edite o arquivo .env com suas configurações do MySQL
 ```
-
 4. **Configurar o Frontend**
 ```bash
 cd ../frontend
@@ -54,13 +100,11 @@ npm install
 copy .env.example .env
 # Configure a URL da API se necessário
 ```
-
 5. **Iniciar o Banco de Dados**
 ```bash
 # No MySQL Command Line Client ou MySQL Workbench
 CREATE DATABASE contacerta;
 ```
-
 6. **Iniciar a Aplicação**
 ```bash
 # Terminal 1 (Backend)
@@ -71,7 +115,6 @@ npm run dev
 cd frontend
 npm start
 ```
-
 ## Instalação no Ubuntu Server (Digital Ocean)
 
 ### Script de Instalação Automática

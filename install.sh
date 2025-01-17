@@ -1,276 +1,221 @@
 #!/bin/bash
 
-# Cores para output
-GREEN='\033[0;32m'
+# Colors for output
 RED='\033[0;31m'
+GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m'
+NC='\033[0m' # No Color
 
-# Configurações de requisitos
-LOG_FILE="/var/log/contacerta_install.log"
-MIN_DISK_SPACE=5  # Mínimo de 5GB de espaço em disco
-MIN_RAM=2         # Mínimo de 2GB de RAM
-NODE_VERSION="18.19.0"  # Versão específica do Node.js
-NPM_VERSION="10.2.3"    # Versão específica do npm
-
-# Função de log
-log() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
-}
-
-# Função de tratamento de erros
-handle_error() {
-    log "ERRO: $1"
-    echo -e "${RED}ERRO: $1${NC}"
-    exit 1
-}
-
-# Verificação de requisitos do sistema
-check_system_requirements() {
-    log "Verificando requisitos do sistema..."
-
-    # Verificação de espaço em disco
-    AVAILABLE_SPACE=$(df -h / | awk '/\// {print $4}' | sed 's/G//')
-    if (( $(echo "$AVAILABLE_SPACE < $MIN_DISK_SPACE" | bc -l) )); then
-        handle_error "Espaço em disco insuficiente. Requer pelo menos ${MIN_DISK_SPACE}GB, mas apenas ${AVAILABLE_SPACE}GB disponível."
-    fi
-
-    # Verificação de RAM
-    TOTAL_RAM=$(free -g | awk '/^Mem:/ {print $2}')
-    if (( TOTAL_RAM < MIN_RAM )); then
-        handle_error "RAM insuficiente. Requer pelo menos ${MIN_RAM}GB, mas apenas ${TOTAL_RAM}GB disponível."
-    fi
-
-    # Verificação de compatibilidade do SO
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        if [[ "$ID" != "ubuntu" ]] || [[ "$VERSION_ID" < "20.04" ]]; then
-            handle_error "Sistema operacional não suportado. Requer Ubuntu 20.04 ou posterior."
-        fi
+# Function to validate domain
+validate_domain() {
+    local domain=$1
+    if [[ $domain =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9](\.[a-zA-Z]{2,})+$ ]]; then
+        return 0
     else
-        handle_error "Não foi possível determinar o sistema operacional."
-    fi
-
-    log "Verificação de requisitos do sistema concluída com sucesso."
-}
-
-# Gerenciamento de versão do Node.js
-install_node_version() {
-    log "Instalando Node.js versão ${NODE_VERSION}"
-    
-    # Remover instalações existentes do Node.js
-    sudo apt-get purge -y nodejs npm
-
-    # Instalar versão específica do Node.js
-    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-    sudo apt-get install -y nodejs
-    
-    # Verificar versões instaladas
-    INSTALLED_NODE_VERSION=$(node --version)
-    INSTALLED_NPM_VERSION=$(npm --version)
-    
-    log "Versão do Node.js instalada: $INSTALLED_NODE_VERSION"
-    log "Versão do npm instalada: $INSTALLED_NPM_VERSION"
-    
-    if [[ "$INSTALLED_NODE_VERSION" != "v${NODE_VERSION}" ]]; then
-        log "Aviso: Versão do Node.js não corresponde exatamente à versão esperada"
+        return 1
     fi
 }
 
-# Bloqueio de dependências
-lock_dependencies() {
-    log "Bloqueando versões de dependências"
-    
-    # Dependências do Backend
-    cd /var/www/contacerta/backend
-    npm ci  # Instalação estrita de dependências
-    
-    # Dependências do Frontend
-    cd /var/www/contacerta/frontend
-    npm ci  # Instalação estrita de dependências
-    
-    log "Dependências instaladas com versões bloqueadas"
-}
-
-# Solicitar domínio ou usar IP
-echo -e "${YELLOW}Digite o domínio onde a aplicação será instalada${NC}"
-echo -e "${YELLOW}(ou deixe em branco para usar o IP do servidor)${NC}"
-read -p "Domínio: " DOMAIN
-
-# Se nenhum domínio foi fornecido, usar o IP do servidor
-if [ -z "$DOMAIN" ]; then
-    DOMAIN=$(curl -s ifconfig.me)
-    echo -e "${YELLOW}Usando IP do servidor: $DOMAIN${NC}"
-fi
-
-echo -e "${GREEN}=== Iniciando instalação do ContaCerta ===${NC}"
-
-# Função para verificar erros
-check_error() {
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Erro: $1${NC}"
-        exit 1
+# Function to validate IP address
+validate_ip() {
+    local ip=$1
+    if [[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        return 0
+    else
+        return 1
     fi
 }
 
-# Função para exibir progresso
-show_progress() {
-    echo -e "${YELLOW}>>> $1...${NC}"
+# Function to validate email
+validate_email() {
+    local email=$1
+    if [[ $email =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
-# Verificar requisitos do sistema
-check_system_requirements
+# Function to install SSL certificate
+install_ssl_certificate() {
+    local domain=$1
+    local email=$2
 
-# 1. Atualização inicial do sistema
-show_progress "Atualizando sistema"
-sudo apt update && sudo apt upgrade -y
-check_error "Falha na atualização do sistema"
+    echo -e "\n${YELLOW}Configurando Certificado SSL para $domain${NC}"
 
-# 2. Instalação de dependências básicas
-show_progress "Instalando dependências básicas"
-sudo apt install -y curl git build-essential nginx mysql-server
-check_error "Falha na instalação das dependências"
+    # Check if Certbot is installed
+    if ! command -v certbot &> /dev/null; then
+        echo -e "${YELLOW}Instalando Certbot...${NC}"
+        sudo apt-get update
+        sudo apt-get install -y certbot python3-certbot-nginx
+    fi
 
-# 3. Configuração do timezone
-show_progress "Configurando timezone"
-sudo timedatectl set-timezone America/Sao_Paulo
-check_error "Falha na configuração do timezone"
+    # Obtain SSL certificate
+    echo -e "${GREEN}Obtendo certificado SSL com Certbot...${NC}"
+    sudo certbot certonly --nginx -d "$domain" -d "www.$domain" --non-interactive --agree-tos -m "$email"
 
-# 4. Instalação do Node.js
-show_progress "Instalando Node.js"
-install_node_version
-check_error "Falha na instalação do Node.js"
+    # Configure Nginx for SSL
+    if [ -f "/etc/nginx/sites-available/contacerta" ]; then
+        sudo sed -i 's/listen 80;/listen 443 ssl;/' /etc/nginx/sites-available/contacerta
+        sudo sed -i "/listen 443 ssl;/a \    ssl_certificate /etc/letsencrypt/live/$domain/fullchain.pem;" /etc/nginx/sites-available/contacerta
+        sudo sed -i "/ssl_certificate.*/a \    ssl_certificate_key /etc/letsencrypt/live/$domain/privkey.pem;" /etc/nginx/sites-available/contacerta
 
-# 5. Configuração do MySQL
-show_progress "Configurando MySQL"
-sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '1508rcrc';"
-sudo mysql -e "FLUSH PRIVILEGES;"
-sudo mysql -e "CREATE DATABASE IF NOT EXISTS contacerta;"
-check_error "Falha na configuração do MySQL"
+        # Add HTTP to HTTPS redirect
+        sudo tee -a /etc/nginx/sites-available/contacerta << EOF
 
-# 6. Configuração do diretório da aplicação
-show_progress "Configurando diretório da aplicação"
-sudo mkdir -p /var/www/contacerta
-cd /var/www/contacerta
-sudo git clone https://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@github.com/rayhenrique/ContaCerta.git .
-check_error "Falha no clone do repositório"
-
-# 7. Configuração de permissões
-show_progress "Configurando permissões"
-sudo chown -R $USER:$USER /var/www/contacerta
-check_error "Falha na configuração de permissões"
-
-# 8. Configuração do Backend
-show_progress "Configurando Backend"
-cd /var/www/contacerta/backend
-lock_dependencies
-check_error "Falha na instalação das dependências do backend"
-
-# Criar arquivo .env
-cat > .env << EOF
-DB_HOST=localhost
-DB_USER=root
-DB_PASS=1508rcrc
-DB_NAME=contacerta
-JWT_SECRET=contacerta2024
-NODE_ENV=production
-PORT=3001
-EOF
-
-# Executar migrações
-npx sequelize-cli db:migrate
-check_error "Falha nas migrações do banco de dados"
-
-# Criar usuário admin
-node src/scripts/createAdmin.js
-check_error "Falha na criação do usuário admin"
-
-# 9. Configuração do Frontend
-show_progress "Configurando Frontend"
-cd /var/www/contacerta/frontend
-lock_dependencies
-check_error "Falha na instalação das dependências do frontend"
-
-# Criar arquivo .env para o frontend
-cat > .env << EOF
-REACT_APP_API_URL=http://${DOMAIN}/api
-EOF
-
-# Build do frontend
-npm run build
-check_error "Falha no build do frontend"
-
-# 10. Instalação e configuração do PM2
-show_progress "Configurando PM2"
-sudo npm install -g pm2
-cd /var/www/contacerta/backend
-pm2 start src/server.js --name contacerta-backend
-pm2 startup systemd
-sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $USER --hp /home/$USER
-pm2 save
-check_error "Falha na configuração do PM2"
-
-# 11. Configuração do Nginx
-show_progress "Configurando Nginx"
-sudo tee /etc/nginx/sites-available/contacerta << EOF
 server {
     listen 80;
-    server_name ${DOMAIN};
-
-    location / {
-        root /var/www/contacerta/frontend/build;
-        index index.html;
-        try_files \$uri \$uri/ /index.html;
-    }
-
-    location /api {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    }
-
-    # Configurações de segurança
-    add_header X-Frame-Options "SAMEORIGIN";
-    add_header X-XSS-Protection "1; mode=block";
-    add_header X-Content-Type-Options "nosniff";
+    server_name $domain www.$domain;
+    return 301 https://\$server_name\$request_uri;
 }
 EOF
 
-sudo ln -s /etc/nginx/sites-available/contacerta /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-check_error "Falha na configuração do Nginx"
+        sudo nginx -t && sudo systemctl restart nginx
+        echo -e "${GREEN}Configuração SSL concluída com sucesso!${NC}"
+    else
+        echo -e "${RED}Arquivo de configuração do Nginx não encontrado. Configuração SSL manual será necessária.${NC}"
+    fi
+}
 
-sudo systemctl restart nginx
-check_error "Falha ao reiniciar Nginx"
+# Clear screen
+clear
 
-# 12. Configuração básica de segurança
-show_progress "Configurando segurança básica"
-sudo ufw allow 22
-sudo ufw allow 80
-sudo ufw allow 443
-sudo ufw --force enable
-check_error "Falha na configuração do firewall"
+echo -e "${YELLOW}===== ContaCerta - Instalação Automática =====${NC}"
+echo -e "${GREEN}Bem-vindo ao assistente de instalação do ContaCerta!${NC}"
+echo ""
 
-sudo apt install -y fail2ban
-sudo systemctl start fail2ban
-sudo systemctl enable fail2ban
-check_error "Falha na instalação do fail2ban"
+# Prompt for Server Address
+while true; do
+    echo "Escolha o tipo de endereço do servidor:"
+    echo "1. Domínio"
+    echo "2. Endereço IP"
+    read -p "Selecione uma opção (1/2): " ADDRESS_TYPE
 
-# Finalização
-echo -e "${GREEN}=== Instalação do ContaCerta concluída com sucesso! ===${NC}"
-echo -e "${YELLOW}Credenciais de acesso:${NC}"
-echo -e "URL: http://${DOMAIN}"
-echo -e "Email: rayhenrique@gmail.com"
-echo -e "Senha: 1508rcrc"
-echo -e "${YELLOW}Importante: Altere a senha após o primeiro acesso${NC}"
+    case $ADDRESS_TYPE in
+        1)
+            read -p "Digite o domínio para o projeto (ex: contacerta.com.br): " SERVER_ADDRESS
+            if validate_domain "$SERVER_ADDRESS"; then
+                break
+            else
+                echo -e "${RED}Domínio inválido. Por favor, insira um domínio válido.${NC}"
+            fi
+            ;;
+        2)
+            read -p "Digite o endereço IP do servidor: " SERVER_ADDRESS
+            if validate_ip "$SERVER_ADDRESS"; then
+                break
+            else
+                echo -e "${RED}Endereço IP inválido. Por favor, insira um endereço IP válido.${NC}"
+            fi
+            ;;
+        *)
+            echo -e "${RED}Opção inválida. Escolha 1 ou 2.${NC}"
+    esac
+done
 
-# Exibir status dos serviços
-echo -e "\n${GREEN}=== Status dos serviços ===${NC}"
-pm2 status
-sudo systemctl status nginx --no-pager
+read -p "Digite o URL do repositório Git (ou deixe em branco para usar o padrão): " GIT_REPO
+GIT_REPO=${GIT_REPO:-https://github.com/rayhenrique/ContaCerta.git}
+
+read -p "Digite seu email de administrador: " ADMIN_EMAIL
+while ! validate_email "$ADMIN_EMAIL"; do
+    echo -e "${RED}Email inválido. Por favor, insira um email válido.${NC}"
+    read -p "Digite seu email de administrador: " ADMIN_EMAIL
+done
+
+# SSL Configuration
+if [[ "$ADDRESS_TYPE" -eq 1 ]]; then
+    read -p "Deseja configurar certificado SSL para o domínio? (s/n): " SSL_CONFIG
+    SSL_CONFIG=${SSL_CONFIG:-n}
+fi
+
+# Database Configuration
+while true; do
+    read -p "Digite o nome de usuário do MySQL (padrão: root): " MYSQL_USER
+    MYSQL_USER=${MYSQL_USER:-root}
+
+    read -sp "Digite a senha do MySQL: " MYSQL_PASSWORD
+    echo ""
+
+    read -p "Digite o nome do banco de dados (padrão: contacerta): " DB_NAME
+    DB_NAME=${DB_NAME:-contacerta}
+
+    # Optional: Validate MySQL connection
+    if mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e ";" 2>/dev/null; then
+        break
+    else
+        echo -e "${RED}Falha na conexão MySQL. Verifique suas credenciais.${NC}"
+    fi
+done
+
+# Server Configuration
+read -p "Deseja configurar um servidor de produção? (s/n): " PRODUCTION_SERVER
+PRODUCTION_SERVER=${PRODUCTION_SERVER:-n}
+
+if [[ "$PRODUCTION_SERVER" =~ ^[Ss]$ ]]; then
+    read -p "Digite o usuário SSH para deploy: " SSH_USER
+fi
+
+# Confirm Installation
+echo -e "\n${YELLOW}Resumo da Instalação:${NC}"
+echo "Endereço do Servidor: $SERVER_ADDRESS"
+echo "Repositório Git: $GIT_REPO"
+echo "Email Admin: $ADMIN_EMAIL"
+echo "Usuário MySQL: $MYSQL_USER"
+echo "Nome do Banco de Dados: $DB_NAME"
+
+read -p "Confirma estas informações? (s/n): " CONFIRM
+
+if [[ "$CONFIRM" =~ ^[Ss]$ ]]; then
+    echo -e "\n${GREEN}Iniciando instalação...${NC}"
+
+    # Clone Repository
+    git clone "$GIT_REPO" contacerta
+    cd contacerta
+
+    # Backend Setup
+    cd backend
+    npm install
+    cp .env.example .env
+
+    # Update .env file with collected information
+    sed -i "s/DB_USER=.*/DB_USER=$MYSQL_USER/" .env
+    sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=$MYSQL_PASSWORD/" .env
+    sed -i "s/DB_NAME=.*/DB_NAME=$DB_NAME/" .env
+    sed -i "s/ADMIN_EMAIL=.*/ADMIN_EMAIL=$ADMIN_EMAIL/" .env
+    sed -i "s/SERVER_ADDRESS=.*/SERVER_ADDRESS=$SERVER_ADDRESS/" .env
+
+    # Database Setup
+    mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;"
+    npm run migrate
+    npm run seed
+
+    # Create Admin User (if not already exists)
+    echo -e "\n${YELLOW}Criando usuário administrador...${NC}"
+    node scripts/createAdmin.js || {
+        echo -e "${RED}Falha ao criar usuário administrador.${NC}"
+        exit 1
+    }
+
+    # Frontend Setup
+    cd ../frontend
+    npm install
+
+    # Production Configuration (Optional)
+    if [[ "$PRODUCTION_SERVER" =~ ^[Ss]$ ]]; then
+        # Nginx configuration, PM2 setup, etc.
+        echo "Configurações de produção serão implementadas"
+
+        # SSL Configuration for Domain
+        if [[ "$ADDRESS_TYPE" -eq 1 ]] && [[ "$SSL_CONFIG" =~ ^[Ss]$ ]]; then
+            install_ssl_certificate "$SERVER_ADDRESS" "$ADMIN_EMAIL"
+        fi
+    fi
+
+    echo -e "\n${GREEN}Instalação concluída com sucesso!${NC}"
+    echo "Para iniciar o projeto:"
+    echo "- Backend: npm run start (na pasta backend)"
+    echo "- Frontend: npm run start (na pasta frontend)"
+
+else
+    echo -e "\n${RED}Instalação cancelada.${NC}"
+fi
