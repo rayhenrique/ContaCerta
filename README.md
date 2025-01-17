@@ -67,6 +67,195 @@ O script guiará você através de um processo interativo de instalação, solic
 - Verifique as permissões do script (`chmod +x install.sh`)
 - Consulte os logs de instalação para detalhes de erros
 
+## Instalação Manual no Ubuntu Server 22.04 LTS
+
+### Pré-requisitos
+- Ubuntu Server 22.04 LTS
+- Acesso root ou usuário com permissões sudo
+- Conexão com a internet
+- Firewall configurado (ufw)
+
+### 1. Atualizar Sistema
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+### 2. Instalar Dependências Básicas
+```bash
+sudo apt install -y git curl wget software-properties-common
+```
+
+### 3. Instalar Node.js 18.x
+```bash
+# Adicionar repositório NodeSource
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+
+# Instalar Node.js
+sudo apt install -y nodejs
+
+# Verificar versão
+node --version
+npm --version
+```
+
+### 4. Instalar MySQL 8.0
+```bash
+# Instalar MySQL
+sudo apt install -y mysql-server
+
+# Configurar instalação segura
+sudo mysql_secure_installation
+
+# Acessar MySQL
+sudo mysql
+
+# Criar usuário e banco de dados
+CREATE USER 'contacerta'@'localhost' IDENTIFIED BY 'SuaSenhaSuperForte123!';
+CREATE DATABASE contacerta;
+GRANT ALL PRIVILEGES ON contacerta.* TO 'contacerta'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+```
+
+### 5. Instalar Nginx
+```bash
+sudo apt install -y nginx
+
+# Configurar firewall
+sudo ufw allow 'Nginx Full'
+sudo ufw enable
+```
+
+### 6. Instalar PM2 (Gerenciamento de Processos)
+```bash
+sudo npm install -g pm2
+```
+
+### 7. Clonar Repositório
+```bash
+# Clonar repositório
+git clone https://github.com/rayhenrique/ContaCerta.git
+cd ContaCerta
+```
+
+### 8. Configurar Backend
+```bash
+# Navegar para pasta backend
+cd backend
+
+# Instalar dependências
+npm install
+
+# Copiar arquivo de configuração
+cp .env.example .env
+
+# Editar configurações
+nano .env
+
+# Configurar variáveis:
+# DB_HOST=localhost
+# DB_USER=contacerta
+# DB_PASSWORD=SuaSenhaSuperForte123!
+# DB_NAME=contacerta
+```
+
+### 9. Configurar Frontend
+```bash
+# Navegar para pasta frontend
+cd ../frontend
+
+# Instalar dependências
+npm install
+
+# Copiar arquivo de configuração
+cp .env.example .env
+
+# Editar configurações de API
+nano .env
+```
+
+### 10. Executar Migrações e Seeds
+```bash
+# Na pasta backend
+cd ../backend
+npm run migrate
+npm run seed
+```
+
+### 11. Configurar Nginx
+```bash
+# Criar configuração do site
+sudo nano /etc/nginx/sites-available/contacerta
+
+# Exemplo de configuração:
+server {
+    listen 80;
+    server_name contacerta.seudominio.com;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+
+# Ativar site
+sudo ln -s /etc/nginx/sites-available/contacerta /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+### 12. Iniciar Aplicação com PM2
+```bash
+# Na pasta backend
+cd backend
+pm2 start npm --name "contacerta-backend" -- start
+
+# Na pasta frontend
+cd ../frontend
+pm2 start npm --name "contacerta-frontend" -- start
+
+# Salvar configuração do PM2
+pm2 save
+pm2 startup
+```
+
+### 13. Configurar SSL (Opcional)
+```bash
+# Instalar Certbot
+sudo apt install -y certbot python3-certbot-nginx
+
+# Obter certificado
+sudo certbot --nginx -d contacerta.seudominio.com
+```
+
+### Solução de Problemas
+- Verifique logs do Nginx: `sudo tail -f /var/log/nginx/error.log`
+- Logs do PM2: `pm2 logs`
+- Logs do sistema: `journalctl -xe`
+
+### Considerações de Segurança
+- Use senhas fortes
+- Mantenha o sistema atualizado
+- Configure fail2ban
+- Use chaves SSH
+- Limite acessos desnecessários
+
+### Atualizações Futuras
+```bash
+# Atualizar código
+git pull
+
+# Instalar novas dependências
+npm install
+
+# Reiniciar aplicação
+pm2 restart all
+```
+
 ## Instalação Local (Windows 11)
 
 1. **Instalar Dependências**
@@ -77,11 +266,13 @@ O script guiará você através de um processo interativo de instalação, solic
 # Instalar MySQL
 # Baixe e instale do site oficial: https://dev.mysql.com/downloads/installer/
 ```
+
 2. **Clonar o Repositório**
 ```bash
 git clone https://github.com/rayhenrique/ContaCerta.git
 cd ContaCerta
 ```
+
 3. **Configurar o Backend**
 ```bash
 cd backend
@@ -91,6 +282,7 @@ npm install
 copy .env.example .env
 # Edite o arquivo .env com suas configurações do MySQL
 ```
+
 4. **Configurar o Frontend**
 ```bash
 cd ../frontend
@@ -100,11 +292,13 @@ npm install
 copy .env.example .env
 # Configure a URL da API se necessário
 ```
+
 5. **Iniciar o Banco de Dados**
 ```bash
 # No MySQL Command Line Client ou MySQL Workbench
 CREATE DATABASE contacerta;
 ```
+
 6. **Iniciar a Aplicação**
 ```bash
 # Terminal 1 (Backend)
@@ -115,6 +309,7 @@ npm run dev
 cd frontend
 npm start
 ```
+
 ## Instalação no Ubuntu Server (Digital Ocean)
 
 ### Script de Instalação Automática
