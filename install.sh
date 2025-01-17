@@ -191,7 +191,7 @@ if [[ "$CONFIRM" =~ ^[Ss]$ ]]; then
 
     # Create Admin User (if not already exists)
     echo -e "\n${YELLOW}Criando usuário administrador...${NC}"
-    node scripts/createAdmin.js || {
+    node src/scripts/createAdmin.js || {
         echo -e "${RED}Falha ao criar usuário administrador.${NC}"
         exit 1
     }
